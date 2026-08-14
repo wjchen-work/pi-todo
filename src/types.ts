@@ -23,7 +23,8 @@ export interface TodoDetails {
     | "list"
     | "start"
     | "complete"
-    | "reopen";
+    | "reopen"
+    | "clean";
   todos: TodoItem[];
   nextId: number;
 }

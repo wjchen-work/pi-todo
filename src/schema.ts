@@ -3,7 +3,7 @@ import { Type, type Static } from "typebox";
 
 /** Parameters accepted by the `todo` tool. */
 export const TodoParams = Type.Object({
-  action: StringEnum(["add", "delete", "list", "start", "complete", "reopen"] as const),
+  action: StringEnum(["add", "delete", "list", "start", "complete", "reopen", "clean"] as const),
   summary: Type.Optional(
     Type.String({ description: "Short summary of the item, shown in the widget (required for add)" }),
   ),

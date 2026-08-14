@@ -48,6 +48,12 @@ export function handleReopen(store: TodoStore, params: TodoInput): TodoItem {
   return store.reopen(params.id);
 }
 
+export function handleClean(store: TodoStore): number {
+  const removed = store.state.todos.length;
+  store.clear();
+  return removed;
+}
+
 // ----------------------------------------------------------------------------
 // Tool registration
 // ----------------------------------------------------------------------------
@@ -57,15 +63,15 @@ export function registerTodoTool(pi: ExtensionAPI, store: TodoStore): void {
     name: "todo",
     label: "Todo",
     description:
-      "Manage a persistent todo list. Each item has a short summary (shown in the editor widget), a longer goal (private to the agent), and a lifecycle status (pending / in_progress / completed). Actions: add (requires summary + goal; starts as pending), delete (requires id), list, start (requires id; pending -> in_progress), complete (requires id; marks as completed), reopen (requires id; completed -> pending).",
+      "Manage a persistent todo list. Each item has a short summary (shown in the editor widget), a longer goal (private to the agent), and a lifecycle status (pending / in_progress / completed). Actions: add (requires summary + goal; starts as pending), delete (requires id), list, start (requires id; pending -> in_progress), complete (requires id; marks as completed), reopen (requires id; completed -> pending), clean (no args; empties the list and resets id counter to 1 — call this at the end of a round of work).",
     promptSnippet: "Track tasks via a persistent todo list (summary + goal)",
     promptGuidelines: [
-      "Use todo to track multi-step work. Call todo with action=\"add\" and provide both summary and goal when starting a new task (the new item starts as pending).",
-      "Call action=\"start\" with the item id when you begin working on a todo; the widget renders active items in bright text.",
-      "Call action=\"complete\" with the item id when a todo is done; completed items move to the bottom of the widget with a strikethrough.",
-      "Call action=\"reopen\" with the item id if a completed todo needs to be revisited; it goes back to pending.",
-      "Call action=\"delete\" with the item id when the todo is no longer relevant at all.",
-      "Call action=\"list\" to see every item including the private goal text.",
+      "Use todo to track multi-step work as discrete rounds. At the start of a round (a new user request), batch-create the full todo list with one action=\"add\" call per step before doing anything else.",
+      "As you progress, call action=\"start\" with the item id when you begin a step, then action=\"complete\" with the item id when it is done. The widget renders the current status above the editor.",
+      "Call action=\"reopen\" with the item id if a completed step needs to be revisited; it goes back to pending.",
+      "When the round's request is fully implemented, call action=\"clean\" once to empty the list and reset id numbering. Do not call clean mid-round — only after every todo for the current request is completed.",
+      "Call action=\"delete\" with the item id only when an individual step is no longer relevant at all (rare; prefer clean at round boundaries).",
+      "Call action=\"list\" to see every item including the private goal text and current status.",
     ],
     parameters: TodoParams,
 
@@ -124,6 +130,19 @@ export function registerTodoTool(pi: ExtensionAPI, store: TodoStore): void {
           return {
             content: [{ type: "text", text: `Reopened todo #${item.id}: ${item.summary}` }],
             details: detailsFor("reopen", store.state),
+          };
+        }
+
+        case "clean": {
+          const removed = handleClean(store);
+          return {
+            content: [{
+              type: "text",
+              text: removed === 0
+                ? "Todo list is already empty"
+                : `Cleared ${removed} todo${removed === 1 ? "" : "s"}`,
+            }],
+            details: detailsFor("clean", store.state),
           };
         }
       }

@@ -82,6 +82,8 @@ export interface TodoStore {
   complete(id: number): TodoItem;
   /** Reopen a completed todo back to pending. */
   reopen(id: number): TodoItem;
+  /** Empty the list and reset nextId to 1 — used between rounds of work. */
+  clear(): void;
   /** Replace state from a freshly-read branch snapshot (session_start / session_tree). */
   reset(state: TodoState): void;
 }
@@ -132,6 +134,10 @@ export function createStore(): TodoStore {
     },
     reopen(id) {
       return transition(state, id, "pending");
+    },
+    clear() {
+      state.todos = [];
+      state.nextId = 1;
     },
     reset(next) {
       state = {

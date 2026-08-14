@@ -1,41 +1,44 @@
-import { truncateToWidth, type Component } from "@earendil-works/pi-tui";
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import { Markdown, type Component } from "@earendil-works/pi-tui";
+import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import type { TodoItem, TodoState, TodoStatus } from "./types.js";
 import { MAX_DISPLAY } from "./types.js";
 
-// SGR codes. SGR 9 enables strikethrough; SGR 29 disables it without
-// disturbing the foreground color set by `theme.fg(...)`.
-const STRIKETHROUGH_OPEN = "\x1b[9m";
-const STRIKETHROUGH_CLOSE = "\x1b[29m";
-
 /**
  * Status-based render order. Items earlier in this array are shown higher in
- * the widget; items not listed (`completed`) fall to the bottom. Stable within
- * each bucket, so insertion order is preserved as a secondary key.
+ * the widget; insertion order is preserved as a secondary key.
  */
 const STATUS_ORDER: readonly TodoStatus[] = ["in_progress", "pending", "completed"];
 
 /**
  * Reads state via a getter on every render so the widget always reflects
  * the current in-memory state without explicit invalidation.
+ *
+ * The body is rendered through pi's `Markdown` component so styling comes
+ * from the markdown theme — no manual `theme.fg(...)` calls here. Status is
+ * expressed through markdown syntax: completed items use `~~strikethrough~~`
+ * together with a `[x]` task checkbox; the in-progress item is bolded so it
+ * stands out among the pending ones.
  */
 export class TodoWidget implements Component {
+  private readonly markdown: Markdown;
+
   constructor(
     private readonly getState: () => TodoState,
-    private readonly theme: Theme,
-  ) { }
+    _theme: Theme,
+  ) {
+    this.markdown = new Markdown("", 0, 0, getMarkdownTheme());
+  }
 
   invalidate(): void {
-    // No cached state to clear; render() reads fresh data each call.
+    this.markdown.invalidate();
   }
 
   render(width: number): string[] {
     const { todos } = this.getState();
-    const th = this.theme;
 
     if (todos.length === 0) {
       // Empty state: render nothing so the widget disappears entirely
-      // (no "No todos" placeholder, no blank line).
+      // (no placeholder, no blank line).
       return [];
     }
 
@@ -46,39 +49,29 @@ export class TodoWidget implements Component {
     const visible = sorted.slice(0, MAX_DISPLAY);
     const hiddenCount = sorted.length - visible.length;
 
-    const lines: string[] = [];
-    for (const todo of visible) {
-      lines.push(truncateToWidth(`  ${formatTodo(todo, th)}`, width));
-    }
-
+    const lines = visible.map(formatTodoAsMarkdown);
     if (hiddenCount > 0) {
-      lines.push(truncateToWidth(th.fg("dim", `  +${hiddenCount} more...`), width));
+      lines.push(`*+${hiddenCount} more...*`);
     }
 
-    return lines;
+    this.markdown.setText(lines.join("\n"));
+    return this.markdown.render(width);
   }
 }
 
 /**
- * Render a single todo line according to its status. Pure — no side effects,
- * no shared state — so callers can compose it freely.
+ * Render a single todo line as a markdown list item. Pure — no side effects.
  */
-function formatTodo(todo: TodoItem, th: Theme): string {
-  const idLabel = th.fg("accent", `#${todo.id}`);
-  const summary = styleSummary(todo.summary, todo.status, th);
-  return `${idLabel} ${summary}`;
-}
-
-function styleSummary(summary: string, status: TodoStatus, th: Theme): string {
-  switch (status) {
+function formatTodoAsMarkdown(todo: TodoItem): string {
+  const id = `#${todo.id}`;
+  switch (todo.status) {
     case "in_progress":
-      // Brightest (default `text` color) so the active item stands out.
-      return th.fg("text", summary);
+      // Bold so the active item stands out among pending ones.
+      return `- [ ] ${id} **${todo.summary}**`;
     case "pending":
-      // Greyer than `text`, but not as muted as `dim`.
-      return th.fg("muted", summary);
+      return `- [ ] ${id} ${todo.summary}`;
     case "completed":
-      // Greyed out + strikethrough; nested so the FG color still applies.
-      return `${STRIKETHROUGH_OPEN}${th.fg("muted", summary)}${STRIKETHROUGH_CLOSE}`;
+      // Task list checkbox + strikethrough; sorted to the bottom.
+      return `- [x] ${id} ~~${todo.summary}~~`;
   }
 }

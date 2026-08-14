@@ -1,5 +1,5 @@
-import { Markdown, type Component } from "@earendil-works/pi-tui";
-import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
+import { Text, type Component } from "@earendil-works/pi-tui";
+import type { Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 import type { TodoItem, TodoState, TodoStatus } from "./types.js";
 import { MAX_DISPLAY } from "./types.js";
 
@@ -10,26 +10,46 @@ import { MAX_DISPLAY } from "./types.js";
 const STATUS_ORDER: readonly TodoStatus[] = ["in_progress", "pending", "completed"];
 
 /**
+ * Bullet character used as the visual marker for every todo line.
+ * A single character keeps width budgeting trivial; ANSI styling handles
+ * per-status emphasis instead of swapping glyphs.
+ */
+const BULLET = "•";
+
+/**
+ * Per-status foreground color pulled from the active theme. Centralised so
+ * the mapping is one obvious place to tweak.
+ * - in_progress → `accent`: visually pops as the active step.
+ * - pending     → `dim`:    present but subdued.
+ * - completed   → `muted`:  lowest contrast; paired with strikethrough below.
+ */
+const STATUS_COLOR: Record<TodoStatus, ThemeColor> = {
+  in_progress: "accent",
+  pending: "dim",
+  completed: "muted",
+};
+
+/**
  * Reads state via a getter on every render so the widget always reflects
  * the current in-memory state without explicit invalidation.
  *
- * The body is rendered through pi's `Markdown` component so styling comes
- * from the markdown theme — no manual `theme.fg(...)` calls here. Status is
- * expressed purely through inline markdown styling: `**bold**` for the
- * active step, `~~strikethrough~~` for completed items.
+ * The body is rendered through pi's plain `Text` component — no markdown
+ * parsing, no `**bold**` / `~~strike~~` inline syntax. Each line is a
+ * themed `• summary` string; status is conveyed by color and (for completed)
+ * by strikethrough.
  */
 export class TodoWidget implements Component {
-  private readonly markdown: Markdown;
+  private readonly text: Text;
 
   constructor(
     private readonly getState: () => TodoState,
-    _theme: Theme,
+    private readonly theme: Theme,
   ) {
-    this.markdown = new Markdown("", 0, 0, getMarkdownTheme());
+    this.text = new Text("", 0, 0);
   }
 
   invalidate(): void {
-    this.markdown.invalidate();
+    this.text.invalidate();
   }
 
   render(width: number): string[] {
@@ -48,31 +68,30 @@ export class TodoWidget implements Component {
     const visible = sorted.slice(0, MAX_DISPLAY);
     const hiddenCount = sorted.length - visible.length;
 
-    const lines = visible.map(formatTodoAsMarkdown);
+    const lines = visible.map((todo) => formatTodoLine(this.theme, todo));
     if (hiddenCount > 0) {
-      lines.push(`* +${hiddenCount} more...`);
+      lines.push(this.theme.fg("dim", `${BULLET} +${hiddenCount} more...`));
     }
 
-    this.markdown.setText(lines.join("\n"));
-    return this.markdown.render(width);
+    this.text.setText(lines.join("\n"));
+    return this.text.render(width);
   }
 }
 
 /**
- * Render a single todo line as a markdown list item. Pure — no side effects.
+ * Render a single todo line as a themed `• summary` string. Pure — the only
+ * side effect is calling pure theme helpers.
+ *
  * No `#N` prefix and no `[ ]` checkbox — status is expressed purely through
- * inline markdown styling: bold for the active step, strikethrough for done.
- * The id is still available to the LLM via the `list` action.
+ * color and (for completed) strikethrough. The id is still available to the
+ * LLM via the `list` action.
  */
-function formatTodoAsMarkdown(todo: TodoItem): string {
-  switch (todo.status) {
-    case "in_progress":
-      // Bold so the active item stands out among pending ones.
-      return `* **${todo.summary}**`;
-    case "pending":
-      return `* ${todo.summary}`;
-    case "completed":
-      // Strikethrough only — sorted to the bottom by the caller.
-      return `* ~~${todo.summary}~~`;
-  }
+function formatTodoLine(theme: Theme, todo: TodoItem): string {
+  const color = STATUS_COLOR[todo.status];
+  const bullet = theme.fg(color, BULLET);
+  const summary = theme.fg(
+    color,
+    todo.status === "completed" ? theme.strikethrough(todo.summary) : todo.summary,
+  );
+  return `${bullet} ${summary}`;
 }

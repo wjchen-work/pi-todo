@@ -86,9 +86,7 @@ multi-step work is on the table. Just talk to pi normally.
 > **pi (internally)**: Let me lay out the work in `todo` first.
 >
 > ```
-> todo add summary="Rewrite README" goal="Keep the original structure, add install / usage / API sections, include an ASCII mockup"
-> todo add summary="Add unit tests" goal="Cover store.add / delete / reset / readState branches"
-> todo add summary="Run pnpm check" goal="tsc --noEmit && eslint . must pass"
+> todo create items=[{"summary":"Rewrite README","goal":"Keep the original structure, add install / usage / API sections, include an ASCII mockup"},{"summary":"Add unit tests","goal":"Cover store.create / reset / readState branches"},{"summary":"Run pnpm check","goal":"tsc --noEmit && eslint . must pass"}]
 > todo start id=1
 > ... (work on README) ...
 > todo complete id=1
@@ -123,18 +121,22 @@ What the model sees (the TypeBox schema is rendered to the LLM automatically):
 
 | Field      | Type                                                            | Required for                                  | Notes                                                |
 | ---------- | --------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------- |
-| `action`   | `"add"` \| `"delete"` \| `"list"` \| `"start"` \| `"complete"` \| `"reopen"` \| `"clean"` | always                                        | The operation                                        |
-| `summary`  | `string`                                                        | `add`                                         | Short label — **shown in the widget**                |
-| `goal`     | `string`                                                        | `add`                                         | Detailed goal — **private to the model**, for planning |
-| `id`       | `number`                                                        | `delete`, `start`, `complete`, `reopen`        | ID of the todo to operate on                         |
+| `action`   | `"create"` \| `"list"` \| `"start"` \| `"complete"` \| `"reopen"` \| `"clean"` | always                                        | The operation                                        |
+| `items`    | `Array<{ summary: string; goal: string }>`                      | `create`                                      | Batch of todos — the whole array is committed atomically; each item has a short `summary` (shown in the widget) and a longer `goal` (private to the model) |
+| `id`       | `number`                                                        | `start`, `complete`, `reopen`                  | ID of the todo to operate on                         |
 
 ### Examples
 
 ```jsonc
-// 1) At the start of a round, batch-create the full plan
-{ "action": "add", "summary": "Implement store", "goal": "Support add/delete/reset and branch replay" }
-{ "action": "add", "summary": "Wire up the todo tool", "goal": "Add handlers, renderCall, renderResult" }
-{ "action": "add", "summary": "Register the widget", "goal": "Sync on session_start, hide when empty" }
+// 1) At the start of a round, batch-create the full plan in ONE call
+{
+  "action": "create",
+  "items": [
+    { "summary": "Implement store", "goal": "Support create/reset and branch replay" },
+    { "summary": "Wire up the todo tool", "goal": "Add handlers, renderCall, renderResult" },
+    { "summary": "Register the widget", "goal": "Sync on session_start, hide when empty" }
+  ]
+}
 
 // 2) As you progress, flip status one step at a time
 { "action": "start", "id": 1 }      // pending -> in_progress
@@ -143,20 +145,19 @@ What the model sees (the TypeBox schema is rendered to the LLM automatically):
 // 3) Peek at the full picture any time
 { "action": "list" }
 
-// 4) Reopen a step if you need to revisit it (completed -> pending)
+// 4) Reopen a step if you need to revisit it (completed -> pending).
+//    There is no per-item delete — reopen it back to pending and let clean
+//    drop the whole list at round end.
 { "action": "reopen", "id": 1 }
 
 // 5) At the end of the round, once everything is done — clean slate for the next round
 { "action": "clean" }
-
-// 6) Rare: remove an individual step (prefer `clean` at round boundaries)
-{ "action": "delete", "id": 1 }
 ```
 
 Tool result:
 
 ```
-Added todo #1: Implement store
+Created 3 todos: #1, #2, #3
 ```
 
 The full state snapshot is also written into the tool result's `details` — that's the secret
@@ -166,11 +167,14 @@ sauce that makes branch-aware persistence work.
 
 The widget above the editor is meant to track **one round of work** at a time:
 
-1. When the user makes a new request, **batch-create the full todo list first** — one `add` call
-   per step, before doing anything else.
+1. When the user makes a new request, **batch-create the full plan in a single `create` call**
+   — pass the entire `items: [...]` array up front. Don't spread plan creation across multiple
+   calls and don't start any work before the plan is committed.
 2. As you work, call `start` on the next item, do the work, then `complete` it. The widget
    reflects current status in real time.
-3. When the user's request is **fully** implemented, call `clean` once to empty the list and
+3. If a step is no longer relevant, call `reopen` to send it back to `pending`; individual
+   items cannot be deleted.
+4. When the user's request is **fully** implemented, call `clean` once to empty the list and
    reset id numbering. Do **not** call `clean` mid-round — only after every todo for the
    current request is `completed`.
 
@@ -196,7 +200,7 @@ todo is rejected — `reopen` first if you really mean to resume it).
 | **Dual-track todos**     | `summary` (short, user-visible) + `goal` (long, model-private) — keeps the widget tidy     |
 | **Lifecycle status**     | `pending` / `in_progress` / `completed` with strict transitions                            |
 | **Markdown rendering**   | The widget delegates to pi's `Markdown` component — status is expressed via task checkboxes, bold, and strikethrough; no manual ANSI colors in widget code |
-| **Round-based workflow** | One round = batch `add` at the start, step-by-step `start`/`complete`, then `clean` once the round is fully done |
+| **Round-based workflow** | One round = batch `create` at the start, step-by-step `start`/`complete`, then `clean` once the round is fully done; no per-item delete |
 | **Widget throttling**    | Renders at most 4 items; the rest collapse into a `+N more...` hint                        |
 | **Sort-by-status**       | Items are sorted by status at render time (`in_progress` first, `pending` next, `completed` last); insertion order is preserved as a secondary key |
 | **Branch awareness**     | State is serialized into `toolResult.details`; `session_tree` replays the current branch   |

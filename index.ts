@@ -17,12 +17,15 @@
  * - `widget.ts`  — TUI widget rendering the current list
  * - `tool.ts`    — `todo` tool definition (handlers + render callbacks)
  * - `index.ts`   — extension entry point (this file)
+ *
+ * Note: this entry file lives at the project root; sibling modules are
+ * imported from `./src/...`.
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { TodoWidget } from "./widget.js";
-import { createStore, readState } from "./store.js";
-import { registerTodoTool } from "./tool.js";
+import { TodoWidget } from "./src/widget.js";
+import { createStore, readState } from "./src/store.js";
+import { registerTodoTool } from "./src/tool.js";
 
 export default function (pi: ExtensionAPI) {
   // Single source of truth, scoped to this extension instance (a new factory

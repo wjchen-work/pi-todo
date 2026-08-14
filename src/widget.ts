@@ -82,9 +82,9 @@ export class TodoWidget implements Component {
  * Render a single todo line as a themed `• summary` string. Pure — the only
  * side effect is calling pure theme helpers.
  *
- * No `#N` prefix and no `[ ]` checkbox — status is expressed purely through
- * color and (for completed) strikethrough. The id is still available to the
- * LLM via the `list` action.
+ * No `[ ]` checkbox — status is expressed purely through color and (for
+ * completed) strikethrough. The summary itself is the item's identity, so
+ * the LLM never needs a separate id badge on the widget line.
  */
 function formatTodoLine(theme: Theme, todo: TodoItem): string {
   const color = STATUS_COLOR[todo.status];

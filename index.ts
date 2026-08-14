@@ -5,7 +5,10 @@
  * - A `todo` tool with `create` / `list` / `start` / `complete` / `reopen` / `clean`
  *   actions; items are batch-created via `create items: [{summary, goal}, ...]`
  *   and never individually deleted (use `clean` to reset between rounds)
- * - Each item has a short `summary` (shown in the widget) and a longer `goal` (for the agent)
+ * - Each item has a short `summary` (shown in the widget, also acts as the
+ *   item's unique key) and a longer `goal` (for the agent). `start`,
+ *   `complete`, and `reopen` reference an existing item by its exact
+ *   `summary` string; duplicates are rejected by `create`.
  * - A widget above the editor shows up to 4 summaries and a `+N more` hint
  *   for the hidden remainder
  *

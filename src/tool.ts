@@ -12,7 +12,7 @@ import { isAllCompleted } from "./store.js";
 /** Reminder appended to results when every todo is `completed`. */
 const ALL_COMPLETED_HINT =
   "All todos are completed. If this round of work is finished, call todo with " +
-  "action=\"clean\" to empty the list and reset id numbering.";
+  "action=\"clean\" to empty the list.";
 
 export function handleList(store: TodoStore): readonly TodoItem[] {
   return store.list();
@@ -26,24 +26,24 @@ export function handleCreate(store: TodoStore, params: TodoInput): TodoItem[] {
 }
 
 export function handleStart(store: TodoStore, params: TodoInput): TodoItem {
-  if (params.id === undefined) {
-    throw new Error("id is required for start");
+  if (params.summary === undefined) {
+    throw new Error("summary is required for start");
   }
-  return store.start(params.id);
+  return store.start(params.summary);
 }
 
 export function handleComplete(store: TodoStore, params: TodoInput): TodoItem {
-  if (params.id === undefined) {
-    throw new Error("id is required for complete");
+  if (params.summary === undefined) {
+    throw new Error("summary is required for complete");
   }
-  return store.complete(params.id);
+  return store.complete(params.summary);
 }
 
 export function handleReopen(store: TodoStore, params: TodoInput): TodoItem {
-  if (params.id === undefined) {
-    throw new Error("id is required for reopen");
+  if (params.summary === undefined) {
+    throw new Error("summary is required for reopen");
   }
-  return store.reopen(params.id);
+  return store.reopen(params.summary);
 }
 
 export function handleClean(store: TodoStore): number {
@@ -61,13 +61,13 @@ export function registerTodoTool(pi: ExtensionAPI, store: TodoStore): void {
     name: "todo",
     label: "Todo",
     description:
-      "Manage an in-memory todo list for one round of work. Each item has a short summary (shown in the editor widget) and a longer goal (private to the agent); every item also carries a lifecycle status (pending / in_progress / completed). Actions: create (requires items[]; each item has summary + goal; the whole batch is committed atomically and each item starts as pending), list, start (requires id; pending -> in_progress), complete (requires id; marks as completed), reopen (requires id; completed -> pending), clean (no args; empties the list and resets id counter to 1 — call this at the end of a round of work). Items are never individually removed; if a step is no longer relevant, reopen it back to pending and let clean drop the whole list at round end.",
+      "Manage an in-memory todo list for one round of work. Each item has a short summary (shown in the editor widget) and a longer goal (private to the agent); every item also carries a lifecycle status (pending / in_progress / completed). The summary is the item's identity — start / complete / reopen reference an existing item by its exact summary string, and every summary in the list (and within a single create batch) must be unique. Actions: create (requires items[]; each item has summary + goal; the whole batch is committed atomically and each item starts as pending; rejected if any summary already exists or collides within the batch), list, start (requires summary; pending -> in_progress), complete (requires summary; marks as completed), reopen (requires summary; completed -> pending), clean (no args; empties the list — call this at the end of a round of work). Items are never individually removed; if a step is no longer relevant, reopen it back to pending and let clean drop the whole list at round end.",
     promptSnippet: "Track tasks via an in-memory todo list (summary + goal)",
     promptGuidelines: [
-      "Use todo to track multi-step work as discrete rounds. At the start of a round (a new user request), batch-create the full todo list in ONE action=\"create\" call with items: [{summary, goal}, ...] — do not call create multiple times and do not mix in other actions before planning is complete.",
-      "As you progress, call action=\"start\" with the item id when you begin a step, then action=\"complete\" with the item id when it is done. The widget renders the current status above the editor.",
-      "Call action=\"reopen\" with the item id if a completed step needs to be revisited; it goes back to pending. Use this instead of deleting — individual items cannot be removed.",
-      "When the round's request is fully implemented, call action=\"clean\" once to empty the list and reset id numbering. Do not call clean mid-round — only after every todo for the current request is completed.",
+      "Use todo to track multi-step work as discrete rounds. At the start of a round (a new user request), batch-create the full todo list in ONE action=\"create\" call with items: [{summary, goal}, ...] — do not call create multiple times and do not mix in other actions before planning is complete. Every summary in the batch must be unique and must not collide with a summary already in the list.",
+      "As you progress, call action=\"start\" with the exact summary string when you begin a step, then action=\"complete\" with the same exact summary string when it is done. The widget renders the current status above the editor.",
+      "Call action=\"reopen\" with the exact summary string if a completed step needs to be revisited; it goes back to pending. Use this instead of deleting — individual items cannot be removed.",
+      "When the round's request is fully implemented, call action=\"clean\" once to empty the list. Do not call clean mid-round — only after every todo for the current request is completed.",
       "The `list` and `complete` results append a reminder whenever every todo is completed — treat that reminder as the signal the round is done and call action=\"clean\" once.",
       "Call action=\"list\" to see every item including the private goal text and current status.",
     ],
@@ -82,7 +82,7 @@ export function registerTodoTool(pi: ExtensionAPI, store: TodoStore): void {
             : items
               .map((t) => {
                 const status = t.status.padEnd(11);
-                return `#${t.id} [${status}] [summary] ${t.summary}\n         [goal]    ${t.goal}`;
+                return `[${status}] [summary] ${t.summary}\n         [goal]    ${t.goal}`;
               })
               .join("\n");
           if (isAllCompleted(store.state)) {
@@ -97,8 +97,8 @@ export function registerTodoTool(pi: ExtensionAPI, store: TodoStore): void {
         case "create": {
           const items = handleCreate(store, params);
           const header = items.length === 1
-            ? `Created todo #${items[0]!.id}: ${items[0]!.summary}`
-            : `Created ${items.length} todos: ${items.map((i) => `#${i.id}`).join(", ")}`;
+            ? `Created todo: ${items[0]!.summary}`
+            : `Created ${items.length} todos: ${items.map((i) => `"${i.summary}"`).join(", ")}`;
           return {
             content: [{ type: "text", text: header }],
             details: undefined,
@@ -108,7 +108,7 @@ export function registerTodoTool(pi: ExtensionAPI, store: TodoStore): void {
         case "start": {
           const item = handleStart(store, params);
           return {
-            content: [{ type: "text", text: `Started todo #${item.id}: ${item.summary}` }],
+            content: [{ type: "text", text: `Started todo: ${item.summary}` }],
             details: undefined,
           };
         }
@@ -119,7 +119,7 @@ export function registerTodoTool(pi: ExtensionAPI, store: TodoStore): void {
           return {
             content: [{
               type: "text",
-              text: `Completed todo #${item.id}: ${item.summary}${hint}`,
+              text: `Completed todo: ${item.summary}${hint}`,
             }],
             details: undefined,
           };
@@ -128,7 +128,7 @@ export function registerTodoTool(pi: ExtensionAPI, store: TodoStore): void {
         case "reopen": {
           const item = handleReopen(store, params);
           return {
-            content: [{ type: "text", text: `Reopened todo #${item.id}: ${item.summary}` }],
+            content: [{ type: "text", text: `Reopened todo: ${item.summary}` }],
             details: undefined,
           };
         }
@@ -159,8 +159,8 @@ export function registerTodoTool(pi: ExtensionAPI, store: TodoStore): void {
           : `"${first.summary}"${theme.fg("dim", ` (+${count - 1} more)`)}`;
         content += ` ${theme.fg("dim", preview)}`;
       }
-      if (args.id !== undefined) {
-        content += ` ${theme.fg("accent", `#${args.id}`)}`;
+      if (args.summary !== undefined) {
+        content += ` ${theme.fg("accent", `"${args.summary}"`)}`;
       }
       text.setText(content);
       return text;

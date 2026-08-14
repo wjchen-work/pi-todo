@@ -49,28 +49,32 @@ export function assertTransition(current: TodoStatus, next: TodoStatus): void {
 export interface TodoStore {
   /** Live state. Reads always return the latest snapshot. */
   readonly state: TodoState;
-  /** Batch-create one or more todos atomically. Returns the created items in input order. */
+  /**
+   * Batch-create one or more todos atomically. Returns the created items in
+   * input order. Throws if any summary already exists in the list or appears
+   * more than once in the batch — the whole batch is rejected without
+   * mutating state.
+   */
   create(items: ReadonlyArray<CreateTodoInput>): TodoItem[];
   list(): readonly TodoItem[];
-  /** Move a todo to `in_progress`. */
-  start(id: number): TodoItem;
-  /** Mark a todo as completed. */
-  complete(id: number): TodoItem;
-  /** Reopen a completed todo back to pending. */
-  reopen(id: number): TodoItem;
-  /** Empty the list and reset nextId to 1 — used between rounds of work. */
+  /** Move a todo identified by `summary` to `in_progress`. */
+  start(summary: string): TodoItem;
+  /** Mark a todo identified by `summary` as completed. */
+  complete(summary: string): TodoItem;
+  /** Reopen a completed todo identified by `summary` back to pending. */
+  reopen(summary: string): TodoItem;
+  /** Empty the list — used between rounds of work. */
   clear(): void;
 }
 
-function findTodo(state: TodoState, id: number): TodoItem {
-  const idx = state.todos.findIndex((t) => t.id === id);
-  if (idx === -1) throw new Error(`todo #${id} not found`);
-  const todo = state.todos[idx]!;
+function findTodoBySummary(state: TodoState, summary: string): TodoItem {
+  const todo = state.todos.find((t) => t.summary === summary);
+  if (!todo) throw new Error(`todo with summary "${summary}" not found`);
   return todo;
 }
 
-function transition(state: TodoState, id: number, next: TodoStatus): TodoItem {
-  const todo = findTodo(state, id);
+function transition(state: TodoState, summary: string, next: TodoStatus): TodoItem {
+  const todo = findTodoBySummary(state, summary);
   assertTransition(todo.status, next);
   todo.status = next;
   return todo;
@@ -85,10 +89,19 @@ export function createStore(): TodoStore {
       if (items.length === 0) {
         throw new Error("create requires at least one item");
       }
+      // Two-pass atomicity: validate the whole batch against the current
+      // state, then commit. The first collision short-circuits with no
+      // mutation to `state.todos`.
+      const seen = new Set(state.todos.map((t) => t.summary));
+      for (const input of items) {
+        if (seen.has(input.summary)) {
+          throw new Error(`todo with summary "${input.summary}" already exists`);
+        }
+        seen.add(input.summary);
+      }
       const created: TodoItem[] = [];
       for (const input of items) {
         const item: TodoItem = {
-          id: state.nextId++,
           status: DEFAULT_STATUS,
           summary: input.summary,
           goal: input.goal,
@@ -101,18 +114,17 @@ export function createStore(): TodoStore {
     list() {
       return state.todos;
     },
-    start(id) {
-      return transition(state, id, "in_progress");
+    start(summary) {
+      return transition(state, summary, "in_progress");
     },
-    complete(id) {
-      return transition(state, id, "completed");
+    complete(summary) {
+      return transition(state, summary, "completed");
     },
-    reopen(id) {
-      return transition(state, id, "pending");
+    reopen(summary) {
+      return transition(state, summary, "pending");
     },
     clear() {
       state.todos = [];
-      state.nextId = 1;
     },
   };
 }

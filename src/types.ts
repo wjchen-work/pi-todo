@@ -1,9 +1,13 @@
 /** Lifecycle state of a todo item. */
 export type TodoStatus = "pending" | "in_progress" | "completed";
 
-/** Single todo item: a short summary shown in the widget, plus a longer goal for the agent. */
+/**
+ * Single todo item: a short summary shown in the widget, plus a longer goal
+ * for the agent. The `summary` is the item's identity — there is no separate
+ * numeric id; lookups and references in `start` / `complete` / `reopen`
+ * pass the exact summary string.
+ */
 export interface TodoItem {
-  id: number;
   status: TodoStatus;
   summary: string;
   goal: string;
@@ -12,20 +16,20 @@ export interface TodoItem {
 /** In-memory todo state. */
 export interface TodoState {
   todos: TodoItem[];
-  nextId: number;
 }
 
 /**
  * One entry inside a `create` action's `items` array. Each entry becomes a
- * `TodoItem` (assigned a fresh id and `pending` status) once the batch is
- * committed atomically.
+ * `TodoItem` (assigned `pending` status) once the batch is committed
+ * atomically. The whole batch is rejected if any summary already exists in
+ * the list or collides with another entry in the same batch.
  */
 export interface CreateTodoInput {
   summary: string;
   goal: string;
 }
 
-export const EMPTY_STATE: TodoState = { todos: [], nextId: 1 };
+export const EMPTY_STATE: TodoState = { todos: [] };
 
 /** Default status assigned to a freshly-added todo. */
 export const DEFAULT_STATUS: TodoStatus = "pending";

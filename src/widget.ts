@@ -15,9 +15,8 @@ const STATUS_ORDER: readonly TodoStatus[] = ["in_progress", "pending", "complete
  *
  * The body is rendered through pi's `Markdown` component so styling comes
  * from the markdown theme — no manual `theme.fg(...)` calls here. Status is
- * expressed through markdown syntax: completed items use `~~strikethrough~~`
- * together with a `[x]` task checkbox; the in-progress item is bolded so it
- * stands out among the pending ones.
+ * expressed purely through inline markdown styling: `**bold**` for the
+ * active step, `~~strikethrough~~` for completed items.
  */
 export class TodoWidget implements Component {
   private readonly markdown: Markdown;
@@ -51,7 +50,7 @@ export class TodoWidget implements Component {
 
     const lines = visible.map(formatTodoAsMarkdown);
     if (hiddenCount > 0) {
-      lines.push(`*+${hiddenCount} more...*`);
+      lines.push(`* +${hiddenCount} more...`);
     }
 
     this.markdown.setText(lines.join("\n"));
@@ -61,18 +60,19 @@ export class TodoWidget implements Component {
 
 /**
  * Render a single todo line as a markdown list item. Pure — no side effects.
- * No `#N` prefix — the markdown list itself provides ordering; the id is
- * still available to the LLM via the `list` action.
+ * No `#N` prefix and no `[ ]` checkbox — status is expressed purely through
+ * inline markdown styling: bold for the active step, strikethrough for done.
+ * The id is still available to the LLM via the `list` action.
  */
 function formatTodoAsMarkdown(todo: TodoItem): string {
   switch (todo.status) {
     case "in_progress":
       // Bold so the active item stands out among pending ones.
-      return `- [ ] **${todo.summary}**`;
+      return `* **${todo.summary}**`;
     case "pending":
-      return `- [ ] ${todo.summary}`;
+      return `* ${todo.summary}`;
     case "completed":
-      // Task list checkbox + strikethrough; sorted to the bottom.
-      return `- [x] ~~${todo.summary}~~`;
+      // Strikethrough only — sorted to the bottom by the caller.
+      return `* ~~${todo.summary}~~`;
   }
 }

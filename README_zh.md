@@ -37,14 +37,14 @@
 
 ## 👀 长这样
 
-> 编辑器上方的 widget，把 todo 列表渲染为 markdown 任务列表。最多展示 4 条；超出部分以 `+N more...` 收尾。状态完全通过 markdown 语法表达：
+> 编辑器上方的 widget，把 todo 列表渲染为 markdown 圆点列表。最多展示 4 条；超出部分以 `+N more...` 收尾。状态完全通过行内样式表达——不加 checkbox：
 
 ```
-- [ ] **实现 store 与分支回放逻辑**    ← in_progress（加粗，排在最前）
-- [ ] 编写 todo 工具的 handler        ← pending
-- [ ] 注册 widget 并接入 session_start ← pending
-- [x] ~~设计 schema 并落 TypeBox 类型~~ ← completed（删除线 + 固定末尾）
-*+2 more...*
+* **实现 store 与分支回放逻辑**    ← in_progress（加粗，排在最前）
+* 编写 todo 工具的 handler        ← pending
+* 注册 widget 并接入 session_start ← pending
+* ~~设计 schema 并落 TypeBox 类型~~ ← completed（删除线 + 固定末尾）
+* +2 more...
 ```
 
 空状态：widget 完全隐藏——在添加第一条 todo 之前，编辑器上方不会渲染任何内容。
@@ -53,9 +53,9 @@
 
 | 状态           | markdown 形式                         | 含义                |
 | -------------- | ------------------------------------- | ------------------- |
-| `pending`      | `- [ ] summary`                       | 已规划但还未开始    |
-| `in_progress`  | `- [ ] **summary**`（加粗）            | 正在处理            |
-| `completed`    | `- [x] ~~summary~~`（固定末尾）        | 已完成，视觉上弱化  |
+| `pending`      | `* summary`                           | 已规划但还未开始    |
+| `in_progress`  | `* **summary**`（加粗）                | 正在处理            |
+| `completed`    | `* ~~summary~~`（固定末尾）            | 已完成，视觉上弱化  |
 
 新增 todo 默认为 `pending`。调用 `start` 推进到 `in_progress`，调用 `complete` 标记完成，调用 `reopen` 把已完成的 todo 退回 `pending`。整轮工作完成时调用 `clean` 清空列表并重置 id 编号。
 
@@ -102,9 +102,9 @@ pi install git:https://github.com/wjchen-work/pi-todo.git
 > （编辑器上方的 widget 实时反映状态——）
 >
 > ```
-> - [ ] **运行 pnpm check**
-> - [x] ~~重写 README~~
-> - [x] ~~补充单元测试~~
+> * **运行 pnpm check**
+> * ~~重写 README~~
+> * ~~补充单元测试~~
 > ```
 >
 > （调用 `clean` 后 widget 隐藏——这一轮就结束了。）

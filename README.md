@@ -40,10 +40,10 @@ and what's left.
 > The widget above the editor renders the todo list as a markdown task list. Up to 4 items show; the rest collapse into a `+N more...` hint. Status is expressed through markdown syntax:
 
 ```
-- [ ] #1 **Implement the store with branch replay**   ← in_progress (bold, sorted first)
-- [ ] #2 Wire up the todo tool handlers              ← pending
-- [ ] #3 Register the widget on session_start         ← pending
-- [x] #4 ~~Design the schema with TypeBox types~~     ← completed (strikethrough, sorted last)
+- [ ] **Implement the store with branch replay**   ← in_progress (bold, sorted first)
+- [ ] Wire up the todo tool handlers              ← pending
+- [ ] Register the widget on session_start         ← pending
+- [x] ~~Design the schema with TypeBox types~~     ← completed (strikethrough, sorted last)
 *+2 more...*
 ```
 
@@ -53,9 +53,9 @@ Empty state: the widget is hidden — nothing renders above the editor until you
 
 | Status        | Markdown form                          | Meaning                                  |
 | ------------- | -------------------------------------- | ---------------------------------------- |
-| `pending`     | `- [ ] #N summary`                     | Planned but not started yet              |
-| `in_progress` | `- [ ] #N **summary**` (bold)          | Currently being worked on                |
-| `completed`   | `- [x] #N ~~summary~~` (sorted last)   | Done; visually de-emphasized             |
+| `pending`     | `- [ ] summary`                        | Planned but not started yet              |
+| `in_progress` | `- [ ] **summary**` (bold)             | Currently being worked on                |
+| `completed`   | `- [x] ~~summary~~` (sorted last)      | Done; visually de-emphasized             |
 
 New items start as `pending`. Use `start` to flip one to `in_progress`, `complete` to mark it done, and `reopen` to bring a completed item back to `pending`. When a full round of work is done, call `clean` to empty the list and reset id numbering.
 
@@ -104,9 +104,9 @@ multi-step work is on the table. Just talk to pi normally.
 > (The widget above the editor updates immediately —)
 >
 > ```
-> - [ ] #3 **Run pnpm check**
-> - [x] #1 ~~Rewrite README~~
-> - [x] #2 ~~Add unit tests~~
+> - [ ] **Run pnpm check**
+> - [x] ~~Rewrite README~~
+> - [x] ~~Add unit tests~~
 > ```
 >
 > (After `clean`, the widget disappears — the round is done.)

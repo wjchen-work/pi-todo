@@ -61,17 +61,18 @@ export class TodoWidget implements Component {
 
 /**
  * Render a single todo line as a markdown list item. Pure — no side effects.
+ * No `#N` prefix — the markdown list itself provides ordering; the id is
+ * still available to the LLM via the `list` action.
  */
 function formatTodoAsMarkdown(todo: TodoItem): string {
-  const id = `#${todo.id}`;
   switch (todo.status) {
     case "in_progress":
       // Bold so the active item stands out among pending ones.
-      return `- [ ] ${id} **${todo.summary}**`;
+      return `- [ ] **${todo.summary}**`;
     case "pending":
-      return `- [ ] ${id} ${todo.summary}`;
+      return `- [ ] ${todo.summary}`;
     case "completed":
       // Task list checkbox + strikethrough; sorted to the bottom.
-      return `- [x] ${id} ~~${todo.summary}~~`;
+      return `- [x] ~~${todo.summary}~~`;
   }
 }

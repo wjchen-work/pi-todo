@@ -128,9 +128,12 @@ find . -not -path '*/node_modules/*' -not -path './node_modules' | head -50
 
 本项目是 pi 编码代理的 todo 插件，使用 TypeScript + ESLint flat config，通过 **npm** 管理依赖与执行脚本（**不使用** pnpm / yarn）。`package.json` 中声明的所有脚本统一通过 `npm run <script-name>` 执行。在确认决策时，请同时考虑以下既有约束：
 
-- **包管理与脚本执行**：本项目是 npm 项目；调用 `package.json` 中的脚本请用 `npm run <name>`（如 `npm run check`、`npm run lint`），不要使用 `pnpm` 或 `yarn`
+- **包管理与脚本执行**：本项目是 npm 项目；调用 `package.json` 中的脚本请用 `npm run <name>`（如 `npm run check`、`npm run lint`、`npm run lint:fix`），不要使用 `pnpm` 或 `yarn`
 - **扩展入口**：`src/index.ts` 是 pi 扩展的唯一注册文件，新增功能通常在此注册命令/快捷键/UI 组件
-- **类型检查**：`npm run check` = `tsc --noEmit && eslint .`，提交前必须通过
+- **质量脚本**：
+  - `npm run check` = `tsc --noEmit && eslint .`，提交前必须通过
+  - `npm run lint` = `eslint .`，仅跑 lint（不改文件）
+  - `npm run lint:fix` = `eslint . --fix`，自动修复 lint 报错；Agent 遇到清晰、可自动修复的格式/语法问题时优先使用
 - **不要新增依赖**：除非用户明确同意，不向 `package.json` 添加新依赖（包括 `@types/*`、`eslint-plugin-*` 等）
 - **不要改动构建/质量配置**：`tsconfig.json`、`eslint.config.js` 的语义性变更需特别确认
 - **保持扩展轻量**：本插件是 todo 工具，能力范围外的大改动（如新增 HTTP 服务、数据库引擎）需要明确询问

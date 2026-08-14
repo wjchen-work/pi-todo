@@ -1,83 +1,22 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type {
   TodoState,
-  TodoDetails,
   TodoItem,
   TodoStatus,
   CreateTodoInput,
 } from "./types.js";
 import { DEFAULT_STATUS, EMPTY_STATE } from "./types.js";
-import type { TodoInput } from "./schema.js";
 
 // ----------------------------------------------------------------------------
 // Pure functions — no closure over mutable state.
 // ----------------------------------------------------------------------------
 
-/** Defensive copy for persistence — callers must not share the returned array. */
-export function snapshot(state: TodoState): TodoState {
-  return {
-    todos: state.todos.map((t) => ({ ...t })),
-    nextId: state.nextId,
-  };
-}
-
-export function detailsFor(action: TodoInput["action"], state: TodoState): TodoDetails {
-  return { action, ...snapshot(state) };
-}
-
-/**
- * Backfill legacy todo items persisted before `status` existed. Items without
- * a status field are treated as `pending`. New items always have a status set
- * by the store, so this is only relevant when replaying old sessions.
- */
-export function normalize(todos: TodoItem[]): TodoItem[] {
-  return todos.map((t) => (t.status ? t : { ...t, status: DEFAULT_STATUS }));
-}
-
 /**
  * True when the list has at least one item and every item is `completed`.
- * Used by the auto-clean logic to detect a round that the agent finished but
- * forgot to terminate with `clean`.
+ * Used by the tool layer to remind the LLM (via the result text) that the
+ * round looks done and it should call `clean`.
  */
 export function isAllCompleted(state: TodoState): boolean {
   return state.todos.length > 0 && state.todos.every((t) => t.status === "completed");
-}
-
-/**
- * Walk the current branch and load the most recent snapshot.
- *
- * Auto-clean heuristic: if the last todo toolResult shows "all completed"
- * AND the branch has at least one more entry after it (any subsequent
- * action by the agent or the user), treat the round as already cleaned and
- * reset to EMPTY_STATE. This mirrors the in-memory `turn_end` cleanup so
- * the dirty state does not resurrect on session reload.
- */
-export function readState(ctx: ExtensionContext): TodoState {
-  const branch = ctx.sessionManager.getBranch();
-  let state: TodoState = { ...EMPTY_STATE };
-  let lastTodoResultIdx = -1;
-
-  for (let i = 0; i < branch.length; i++) {
-    const entry = branch[i];
-    if (!entry || entry.type !== "message") continue;
-    const msg = entry.message;
-    if (msg.role !== "toolResult" || msg.toolName !== "todo") continue;
-    const details = msg.details as TodoDetails | undefined;
-    if (!details) continue;
-    state = { todos: details.todos, nextId: details.nextId };
-    lastTodoResultIdx = i;
-  }
-
-  if (
-    lastTodoResultIdx >= 0 &&
-    lastTodoResultIdx < branch.length - 1 &&
-    isAllCompleted(state)
-  ) {
-    state = { ...EMPTY_STATE };
-  }
-
-  state.todos = normalize(state.todos);
-  return state;
 }
 
 // ----------------------------------------------------------------------------
@@ -121,8 +60,6 @@ export interface TodoStore {
   reopen(id: number): TodoItem;
   /** Empty the list and reset nextId to 1 — used between rounds of work. */
   clear(): void;
-  /** Replace state from a freshly-read branch snapshot (session_start / session_tree). */
-  reset(state: TodoState): void;
 }
 
 function findTodo(state: TodoState, id: number): TodoItem {
@@ -140,7 +77,7 @@ function transition(state: TodoState, id: number, next: TodoStatus): TodoItem {
 }
 
 export function createStore(): TodoStore {
-  let state: TodoState = { ...EMPTY_STATE };
+  const state: TodoState = { ...EMPTY_STATE };
 
   return {
     get state() { return state; },
@@ -176,12 +113,6 @@ export function createStore(): TodoStore {
     clear() {
       state.todos = [];
       state.nextId = 1;
-    },
-    reset(next) {
-      state = {
-        todos: next.todos.map((t) => ({ ...t })),
-        nextId: next.nextId,
-      };
     },
   };
 }

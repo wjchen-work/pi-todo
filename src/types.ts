@@ -25,19 +25,6 @@ export interface CreateTodoInput {
   goal: string;
 }
 
-/** Snapshot persisted into tool result `details` so branching/forking reconstructs the list. */
-export interface TodoDetails {
-  action:
-    | "create"
-    | "list"
-    | "start"
-    | "complete"
-    | "reopen"
-    | "clean";
-  todos: TodoItem[];
-  nextId: number;
-}
-
 export const EMPTY_STATE: TodoState = { todos: [], nextId: 1 };
 
 /** Default status assigned to a freshly-added todo. */

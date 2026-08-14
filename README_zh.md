@@ -2,10 +2,10 @@
 
 # 📝 pi-todo
 
-**为 pi 编码代理提供一份持久化、分支感知的 todo 列表。**
+**为 pi 编码代理提供一份内存态 todo 列表。**
 
 把一份带 ID、短摘要、详细目标的真实任务清单交到模型手里——
-跨分支稳定保留，并以简洁的 widget 形态呈现在编辑器正上方。
+在当前会话内以简洁的 widget 形态呈现在编辑器正上方。
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![pi](https://img.shields.io/badge/pi-extension-7c3aed)](https://github.com/earendil-works/pi-coding-agent)
@@ -22,13 +22,14 @@
 
 `pi-todo` 是 [pi 编码代理](https://github.com/earendil-works/pi-coding-agent) 的扩展。
 它把一份**结构化的 todo 列表**交到模型手里——不是埋在聊天里的一行行自由文本，
-而是带 ID、短摘要、详细目标的真实清单，能跨分支、分叉重建。
+而是带 ID、短摘要、详细目标的真实清单，仅在当前会话内存中存活。
 
 模型可以：
 
-- 🟢 **添加** 一条新的 todo（短摘要 + 详细目标）
-- 🔴 **删除** 已完成的 todo（按 ID）
+- 🟢 **批量创建** todo（每条含短摘要 + 详细目标）
+- ▶️ **开始** / ✅ **完成** / 🔁 **重开** 条目，随工作推进流转状态
 - 🔍 **查看** 当前所有 todo（包括模型私有的目标描述）
+- 🧹 **清空** 列表，在一轮工作完成后重置
 
 而你，会在**编辑器正上方**看到一个简洁、实时的面板——
 始终知道模型正在做什么、还剩什么。
@@ -40,7 +41,7 @@
 > 编辑器上方的 widget，把 todo 列表渲染为 markdown 圆点列表。最多展示 4 条；超出部分以 `+N more...` 收尾。状态完全通过行内样式表达——不加 checkbox：
 
 ```
-* **实现 store 与分支回放逻辑**    ← in_progress（加粗，排在最前）
+* **实现内存态 store**    ← in_progress（加粗，排在最前）
 * 编写 todo 工具的 handler        ← pending
 * 注册 widget 并接入 session_start ← pending
 * ~~设计 schema 并落 TypeBox 类型~~ ← completed（删除线 + 固定末尾）
@@ -86,7 +87,7 @@ pi install git:https://github.com/wjchen-work/pi-todo.git
 > **pi（内部）**：先把这一轮的任务列出来，然后逐条推进。
 >
 > ```
-> todo create items=[{"summary":"重写 README","goal":"保持原有结构，新增安装/使用/API 三个章节，配 ASCII mockup"},{"summary":"补充单元测试","goal":"覆盖 store.create / reset / readState 三个分支"},{"summary":"运行 npm run check","goal":"tsc --noEmit && eslint . 必须通过"}]
+> todo create items=[{"summary":"重写 README","goal":"保持原有结构，新增安装/使用/API 三个章节，配 ASCII mockup"},{"summary":"补充单元测试","goal":"覆盖 store.create / clear 与状态流转"},{"summary":"运行 npm run check","goal":"tsc --noEmit && eslint . 必须通过"}]
 > todo start id=1
 > ... (重写 README) ...
 > todo complete id=1
@@ -109,10 +110,6 @@ pi install git:https://github.com/wjchen-work/pi-todo.git
 >
 > （调用 `clean` 后 widget 隐藏——这一轮就结束了。）
 
-> **你**：`/tree` —— 切回上一个分支看看。
->
-> （widget 立刻回滚到那个分支对应的快照；其他分支上加的 todo 不会跟过来。）
-
 ---
 
 ## 🛠 `todo` 工具 API
@@ -132,7 +129,7 @@ pi install git:https://github.com/wjchen-work/pi-todo.git
 {
   "action": "create",
   "items": [
-    { "summary": "实现 store", "goal": "支持 create/reset 与分支回放" },
+    { "summary": "实现 store", "goal": "支持 create 与状态流转" },
     { "summary": "编写 todo 工具", "goal": "handler + renderCall + renderResult" },
     { "summary": "注册 widget",   "goal": "session_start 时同步，空状态隐藏" }
   ]
@@ -159,7 +156,8 @@ pi install git:https://github.com/wjchen-work/pi-todo.git
 Created 3 todos: #1, #2, #3
 ```
 
-完整状态快照同时写入 tool result 的 `details`——这是分支感知持久化的关键。
+状态仅存在于当前会话内存中——不做跨重载、跨分支或分叉的持久化。当所有 todo 都 `completed` 时，
+`list` 与 `complete` 的返回结果会追加一行提醒调用 `clean`，让下一轮从干净状态开始。
 
 ### 轮次工作流
 
@@ -168,7 +166,7 @@ Created 3 todos: #1, #2, #3
 1. 用户提出新需求后，**一次 `create` 调用就把整个 `items: [...]` 计划交上去**——不要拆成多次调用，也不要在计划落地前就开始干活。
 2. 推进过程中，逐条调用 `start` 开始、`complete` 完成；widget 实时反映当前状态。
 3. 如果某条已经不需要了，调 `reopen` 让它回到 `pending`——工具不允许按条删除。
-4. 用户需求**全部**交付后，调用一次 `clean` 清空列表、重置 id 编号。**不要在一轮中途调用 `clean`**——只有当当前请求的所有 todo 都 `completed` 后才能调。
+4. 用户需求**全部**交付后，调用一次 `clean` 清空列表、重置 id 编号。**不要在一轮中途调用 `clean`**——只有当当前请求的所有 todo 都 `completed` 后才能调。当所有 todo 都 `completed` 时，`list`/`complete` 的返回文本会追加提醒，看到它即表示本轮已完成。
 
 ### 状态转换
 
@@ -192,11 +190,10 @@ store 内置一个最小状态机，防止模型误用：
 | **生命周期状态**    | `pending` / `in_progress` / `completed`，由状态机约束                          |
 | **markdown 渲染** | widget 内部交由 pi 的 `Markdown` 组件渲染——状态用任务列表 checkbox、加粗、删除线表达；widget 代码不再手写 ANSI 颜色 |
 | **轮次化使用**      | 一轮需求 = 开始时一次 `create` 提交整个计划 → 逐条 `start`/`complete` → 最后 `clean`；不支持按条删除 |
-| **生命周期状态**    | `pending` / `in_progress` / `completed`，由状态机约束；widget 以颜色 + 删除线呈现 |
 | **widget 节流**    | 最多渲染 4 条，超过则 `+N more...`，避免长列表喧宾夺主                         |
 | **按状态排序**      | 渲染时按状态排序（`in_progress` → `pending` → `completed`）；插入顺序作为次要顺序保留 |
-| **分支感知**       | 状态序列化进 `toolResult.details`；`session_tree` 重放当前分支                |
-| **老数据兼容**      | 旧快照中缺少 `status` 字段时，重放时补齐为 `pending`，无需迁移              |
+| **内存态**          | 列表只在当前会话内有效，不写 `details` 快照，重载/分叉后从干净状态开始        |
+| **全部完成提醒**     | 当所有 todo 都 `completed` 时，`list`/`complete` 返回结果追加提醒调用 `clean` |
 | **零副作用读**     | `render()` 每次拉取最新 state，无需缓存失效处理                                |
 | **类型严格**       | TypeBox schema + strict TS，提交前 `npm run check` 全绿                          |
 
@@ -206,12 +203,12 @@ store 内置一个最小状态机，防止模型误用：
 
 ```
 src/
-├── index.ts    # 扩展入口：注册 widget + 工具 + session 钩子
-├── types.ts    # TodoItem / TodoState / TodoDetails / 常量
+├── types.ts    # TodoItem / TodoState / 常量
 ├── schema.ts   # TypeBox 工具参数 schema
-├── store.ts    # 纯函数快照 + 可变 store + 分支回放
+├── store.ts    # 内存态 store + 状态机
 ├── tool.ts     # todo 工具：handler + renderCall + renderResult
 └── widget.ts   # TodoWidget：TUI 组件
+index.ts        # 扩展入口（位于项目根目录）：注册 widget + 工具
 ```
 
 ---

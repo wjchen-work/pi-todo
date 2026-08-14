@@ -2,10 +2,10 @@
 
 # 📝 pi-todo
 
-**A persistent, branch-aware todo list for the pi coding agent.**
+**An in-memory todo list for the pi coding agent.**
 
 Give your model a real task list — with IDs, summaries, and detailed goals —
-that stays in sync across branches and shows up as a tidy widget above the editor.
+that shows up as a tidy widget above the editor for the current session.
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![pi](https://img.shields.io/badge/pi-extension-7c3aed)](https://github.com/earendil-works/pi-coding-agent)
@@ -22,13 +22,14 @@ that stays in sync across branches and shows up as a tidy widget above the edito
 
 `pi-todo` is an extension for the [pi coding agent](https://github.com/earendil-works/pi-coding-agent).
 It hands your model a **structured todo list** — not a wall of free-form text in the chat,
-but a real list with IDs, short summaries, and longer goals that survives branching and forking.
+but a real list with IDs, short summaries, and longer goals that lives in memory for the session.
 
 Your model can:
 
-- 🟢 **Add** a new todo (short summary + detailed goal)
-- 🔴 **Delete** a completed todo (by ID)
+- 🟢 **Create** todos in one batch (short summary + detailed goal each)
+- ▶️ **Start** / ✅ **Complete** / 🔁 **Reopen** items as work progresses
 - 🔍 **List** every todo, including the private goal text
+- 🧹 **Clean** the list once a round of work is done
 
 And you'll see a slim, live panel **above the editor** — always knowing what the model is doing
 and what's left.
@@ -40,7 +41,7 @@ and what's left.
 > The widget above the editor renders the todo list as a markdown bullet list. Up to 4 items show; the rest collapse into a `+N more...` hint. Status is expressed purely through inline markdown styling — no checkboxes:
 
 ```
-* **Implement the store with branch replay**   ← in_progress (bold, sorted first)
+* **Implement the in-memory store**   ← in_progress (bold, sorted first)
 * Wire up the todo tool handlers               ← pending
 * Register the widget on session_start         ← pending
 * ~~Design the schema with TypeBox types~~     ← completed (strikethrough, sorted last)
@@ -86,7 +87,7 @@ multi-step work is on the table. Just talk to pi normally.
 > **pi (internally)**: Let me lay out the work in `todo` first.
 >
 > ```
-> todo create items=[{"summary":"Rewrite README","goal":"Keep the original structure, add install / usage / API sections, include an ASCII mockup"},{"summary":"Add unit tests","goal":"Cover store.create / reset / readState branches"},{"summary":"Run npm run check","goal":"tsc --noEmit && eslint . must pass"}]
+> todo create items=[{"summary":"Rewrite README","goal":"Keep the original structure, add install / usage / API sections, include an ASCII mockup"},{"summary":"Add unit tests","goal":"Cover store.create / clear and status transitions"},{"summary":"Run npm run check","goal":"tsc --noEmit && eslint . must pass"}]
 > todo start id=1
 > ... (work on README) ...
 > todo complete id=1
@@ -109,10 +110,6 @@ multi-step work is on the table. Just talk to pi normally.
 >
 > (After `clean`, the widget disappears — the round is done.)
 
-> **You**: `/tree` — jump back to the other branch.
->
-> (The widget snaps back to that branch's snapshot. Todos added on other branches don't follow you.)
-
 ---
 
 ## � `todo` tool API
@@ -132,7 +129,7 @@ What the model sees (the TypeBox schema is rendered to the LLM automatically):
 {
   "action": "create",
   "items": [
-    { "summary": "Implement store", "goal": "Support create/reset and branch replay" },
+    { "summary": "Implement store", "goal": "Support create and status transitions" },
     { "summary": "Wire up the todo tool", "goal": "Add handlers, renderCall, renderResult" },
     { "summary": "Register the widget", "goal": "Sync on session_start, hide when empty" }
   ]
@@ -160,8 +157,9 @@ Tool result:
 Created 3 todos: #1, #2, #3
 ```
 
-The full state snapshot is also written into the tool result's `details` — that's the secret
-sauce that makes branch-aware persistence work.
+State lives in memory only for the current session — there is no persistence across reloads,
+branches, or forks. When every todo is `completed`, the `list` and `complete` results append a
+reminder to call `clean`, so the next round starts fresh.
 
 ### Round-based workflow
 
@@ -176,7 +174,8 @@ The widget above the editor is meant to track **one round of work** at a time:
    items cannot be deleted.
 4. When the user's request is **fully** implemented, call `clean` once to empty the list and
    reset id numbering. Do **not** call `clean` mid-round — only after every todo for the
-   current request is `completed`.
+   current request is `completed`. The `list`/`complete` result text appends a reminder once
+   every todo is `completed`; treat it as the signal that the round is done.
 
 ### Status transitions
 
@@ -203,8 +202,8 @@ todo is rejected — `reopen` first if you really mean to resume it).
 | **Round-based workflow** | One round = batch `create` at the start, step-by-step `start`/`complete`, then `clean` once the round is fully done; no per-item delete |
 | **Widget throttling**    | Renders at most 4 items; the rest collapse into a `+N more...` hint                        |
 | **Sort-by-status**       | Items are sorted by status at render time (`in_progress` first, `pending` next, `completed` last); insertion order is preserved as a secondary key |
-| **Branch awareness**     | State is serialized into `toolResult.details`; `session_tree` replays the current branch   |
-| **Legacy compat**        | Old snapshots without `status` are normalized to `pending` on replay — no migration needed  |
+| **In-memory state**      | The list lives only for the current session; no `details` snapshot is written, so reloads and forks start with a clean slate |
+| **All-done reminder**    | `list`/`complete` results append a reminder to call `clean` once every todo is `completed`  |
 | **Zero-side-effect read**| `render()` always pulls the freshest state — no invalidation bookkeeping                    |
 | **Strict types**         | TypeBox schema + strict TS; `npm run check` stays green before every commit                  |
 
@@ -214,12 +213,12 @@ todo is rejected — `reopen` first if you really mean to resume it).
 
 ```
 src/
-├── index.ts    # Extension entry: register widget + tool + session hooks
-├── types.ts    # TodoItem / TodoState / TodoDetails / constants
+├── types.ts    # TodoItem / TodoState / constants
 ├── schema.ts   # TypeBox parameter schema for the todo tool
-├── store.ts    # Pure snapshot helpers + mutable store + branch replay
+├── store.ts    # In-memory store + status state machine
 ├── tool.ts     # todo tool: handlers + renderCall + renderResult
 └── widget.ts   # TodoWidget: TUI component
+index.ts        # Extension entry (lives at the project root): register widget + tool
 ```
 
 ---

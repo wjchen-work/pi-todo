@@ -26,7 +26,7 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { TodoWidget } from "./src/widget.js";
-import { createStore, readState } from "./src/store.js";
+import { createStore, isAllCompleted, readState } from "./src/store.js";
 import { registerTodoTool } from "./src/tool.js";
 
 export default function (pi: ExtensionAPI) {
@@ -50,6 +50,16 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("session_tree", async (_event, ctx) => {
     store.reset(readState(ctx));
+  });
+
+  // Auto-clean: if the agent finishes a turn with every todo already marked
+  // completed but did not call `clean` itself, drop the list so the widget
+  // does not stay cluttered. The matching heuristic in `readState` keeps the
+  // cleanup effective across session reloads.
+  pi.on("turn_end", async (_event, ctx) => {
+    if (!isAllCompleted(store.state)) return;
+    store.clear();
+    syncWidget(ctx);
   });
 
   registerTodoTool(pi, store);

@@ -34,17 +34,48 @@ export function normalize(todos: TodoItem[]): TodoItem[] {
   return todos.map((t) => (t.status ? t : { ...t, status: DEFAULT_STATUS }));
 }
 
-/** Walk the current branch and load the most recent snapshot. */
+/**
+ * True when the list has at least one item and every item is `completed`.
+ * Used by the auto-clean logic to detect a round that the agent finished but
+ * forgot to terminate with `clean`.
+ */
+export function isAllCompleted(state: TodoState): boolean {
+  return state.todos.length > 0 && state.todos.every((t) => t.status === "completed");
+}
+
+/**
+ * Walk the current branch and load the most recent snapshot.
+ *
+ * Auto-clean heuristic: if the last todo toolResult shows "all completed"
+ * AND the branch has at least one more entry after it (any subsequent
+ * action by the agent or the user), treat the round as already cleaned and
+ * reset to EMPTY_STATE. This mirrors the in-memory `turn_end` cleanup so
+ * the dirty state does not resurrect on session reload.
+ */
 export function readState(ctx: ExtensionContext): TodoState {
+  const branch = ctx.sessionManager.getBranch();
   let state: TodoState = { ...EMPTY_STATE };
-  for (const entry of ctx.sessionManager.getBranch()) {
-    if (entry.type !== "message") continue;
+  let lastTodoResultIdx = -1;
+
+  for (let i = 0; i < branch.length; i++) {
+    const entry = branch[i];
+    if (!entry || entry.type !== "message") continue;
     const msg = entry.message;
     if (msg.role !== "toolResult" || msg.toolName !== "todo") continue;
     const details = msg.details as TodoDetails | undefined;
     if (!details) continue;
     state = { todos: details.todos, nextId: details.nextId };
+    lastTodoResultIdx = i;
   }
+
+  if (
+    lastTodoResultIdx >= 0 &&
+    lastTodoResultIdx < branch.length - 1 &&
+    isAllCompleted(state)
+  ) {
+    state = { ...EMPTY_STATE };
+  }
+
   state.todos = normalize(state.todos);
   return state;
 }

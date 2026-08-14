@@ -27,6 +27,27 @@ export function handleDelete(store: TodoStore, params: TodoInput): TodoItem {
   return store.delete(params.id);
 }
 
+export function handleStart(store: TodoStore, params: TodoInput): TodoItem {
+  if (params.id === undefined) {
+    throw new Error("id is required for start");
+  }
+  return store.start(params.id);
+}
+
+export function handleComplete(store: TodoStore, params: TodoInput): TodoItem {
+  if (params.id === undefined) {
+    throw new Error("id is required for complete");
+  }
+  return store.complete(params.id);
+}
+
+export function handleReopen(store: TodoStore, params: TodoInput): TodoItem {
+  if (params.id === undefined) {
+    throw new Error("id is required for reopen");
+  }
+  return store.reopen(params.id);
+}
+
 // ----------------------------------------------------------------------------
 // Tool registration
 // ----------------------------------------------------------------------------
@@ -36,10 +57,15 @@ export function registerTodoTool(pi: ExtensionAPI, store: TodoStore): void {
     name: "todo",
     label: "Todo",
     description:
-			"Manage a persistent todo list. Each item has a short summary (shown in the editor widget) and a longer goal (private to the agent). Actions: add (requires summary + goal), delete (requires id), list.",
+      "Manage a persistent todo list. Each item has a short summary (shown in the editor widget), a longer goal (private to the agent), and a lifecycle status (pending / in_progress / completed). Actions: add (requires summary + goal; starts as pending), delete (requires id), list, start (requires id; pending -> in_progress), complete (requires id; marks as completed), reopen (requires id; completed -> pending).",
     promptSnippet: "Track tasks via a persistent todo list (summary + goal)",
     promptGuidelines: [
-      "Use todo to track multi-step work. Call todo with action=\"add\" and provide both summary and goal when starting a new task; call with action=\"delete\" and the item id when a task is done; call action=\"list\" to see all items including their goal text.",
+      "Use todo to track multi-step work. Call todo with action=\"add\" and provide both summary and goal when starting a new task (the new item starts as pending).",
+      "Call action=\"start\" with the item id when you begin working on a todo; the widget renders active items in bright text.",
+      "Call action=\"complete\" with the item id when a todo is done; completed items move to the bottom of the widget with a strikethrough.",
+      "Call action=\"reopen\" with the item id if a completed todo needs to be revisited; it goes back to pending.",
+      "Call action=\"delete\" with the item id when the todo is no longer relevant at all.",
+      "Call action=\"list\" to see every item including the private goal text.",
     ],
     parameters: TodoParams,
 
@@ -50,7 +76,10 @@ export function registerTodoTool(pi: ExtensionAPI, store: TodoStore): void {
           const text = items.length === 0
             ? "No todos"
             : items
-              .map((t) => `#${t.id} [summary] ${t.summary}\n         [goal] ${t.goal}`)
+              .map((t) => {
+                const status = t.status.padEnd(11);
+                return `#${t.id} [${status}] [summary] ${t.summary}\n         [goal]    ${t.goal}`;
+              })
               .join("\n");
           return {
             content: [{ type: "text", text }],
@@ -71,6 +100,30 @@ export function registerTodoTool(pi: ExtensionAPI, store: TodoStore): void {
           return {
             content: [{ type: "text", text: `Deleted todo #${item.id}: ${item.summary}` }],
             details: detailsFor("delete", store.state),
+          };
+        }
+
+        case "start": {
+          const item = handleStart(store, params);
+          return {
+            content: [{ type: "text", text: `Started todo #${item.id}: ${item.summary}` }],
+            details: detailsFor("start", store.state),
+          };
+        }
+
+        case "complete": {
+          const item = handleComplete(store, params);
+          return {
+            content: [{ type: "text", text: `Completed todo #${item.id}: ${item.summary}` }],
+            details: detailsFor("complete", store.state),
+          };
+        }
+
+        case "reopen": {
+          const item = handleReopen(store, params);
+          return {
+            content: [{ type: "text", text: `Reopened todo #${item.id}: ${item.summary}` }],
+            details: detailsFor("reopen", store.state),
           };
         }
       }

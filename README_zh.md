@@ -37,17 +37,27 @@
 
 ## 👀 长这样
 
-> 编辑器上方的 widget，最多展示 4 条；超出部分以 `+N more...` 收尾：
+> 编辑器上方的 widget，最多展示 4 条；超出部分以 `+N more...` 收尾。每条 todo 会按生命周期状态着色：
 
 ```
-  #1 设计 schema 并落 TypeBox 类型
-  #2 实现 store 与分支回放逻辑
-  #3 编写 todo 工具的 handler
-  #4 注册 widget 并接入 session_start
+  #1 实现 store 与分支回放逻辑      ← in_progress（最亮，纯文本）
+  #2 编写 todo 工具的 handler      ← pending（较灰）
+  #3 注册 widget 并接入 session_start ← pending（较灰）
+  ~~#4 设计 schema 并落 TypeBox 类型~~ ← completed（最灰 + 删除线，固定在末尾）
   +2 more...
 ```
 
 空状态：widget 完全隐藏——在添加第一条 todo 之前，编辑器上方不会渲染任何内容。
+
+### 状态生命周期
+
+| 状态           | widget 样式                        | 含义                      |
+| -------------- | ---------------------------------- | ------------------------- |
+| `pending`      | 较灰文本                            | 已规划但还未开始          |
+| `in_progress`  | 最亮（默认 `text` 色）             | 正在处理                  |
+| `completed`    | 最灰 + 删除线，固定排到末尾         | 已完成，视觉上弱化        |
+
+新增 todo 默认为 `pending`。调用 `start` 推进到 `in_progress`，调用 `complete` 标记完成，调用 `reopen` 把已完成的 todo 退回 `pending`。
 
 ---
 
@@ -103,21 +113,30 @@ pi install git:https://github.com/wjchen-work/pi-todo.git
 
 | 字段      | 类型                              | 必填时机 | 说明                                        |
 | --------- | --------------------------------- | -------- | ------------------------------------------- |
-| `action`  | `"add"` \| `"delete"` \| `"list"` | 始终     | 操作类型                                    |
+| `action`  | `"add"` \| `"delete"` \| `"list"` \| `"start"` \| `"complete"` \| `"reopen"` | 始终     | 操作类型                                    |
 | `summary` | `string`                          | `add`    | 短摘要，**会显示在 widget 上**              |
 | `goal`    | `string`                          | `add`    | 详细目标，**仅模型可见**，用于决策          |
-| `id`      | `number`                          | `delete` | 要删除的 todo ID                            |
+| `id`      | `number`                          | `delete`, `start`, `complete`, `reopen` | 要操作的 todo ID               |
 
 ### 示例
 
 ```jsonc
-// 1) 添加一条
+// 1) 添加一条（默认状态为 `pending`）
 { "action": "add", "summary": "实现 store", "goal": "支持 add/delete/reset 与分支回放" }
 
-// 2) 列出所有
+// 2) 开始处理（pending -> in_progress）
+{ "action": "start", "id": 1 }
+
+// 3) 标记完成（in_progress -> completed，自动排到 widget 末尾）
+{ "action": "complete", "id": 1 }
+
+// 4) 列出所有（含仅模型可见的 `goal` 和当前状态）
 { "action": "list" }
 
-// 3) 删除已完成
+// 5) 重新打开已完成项（completed -> pending）
+{ "action": "reopen", "id": 1 }
+
+// 6) 完全删除
 { "action": "delete", "id": 1 }
 ```
 
@@ -129,6 +148,18 @@ Added todo #1: 实现 store
 
 完整状态快照同时写入 tool result 的 `details`——这是分支感知持久化的关键。
 
+### 状态转换
+
+store 内置一个最小状态机，防止模型误用：
+
+| 当前状态       | 允许的下一状态                              | 调用动作               |
+| -------------- | ------------------------------------------- | ---------------------- |
+| `pending`      | `pending`（no-op）、`in_progress`、`completed` | `start`、`complete`    |
+| `in_progress`  | `in_progress`（no-op）、`completed`           | `complete`             |
+| `completed`    | `completed`（no-op）、`pending`               | `reopen`               |
+
+非法转换会向模型抛出一个明确的错误（例如：试图 `start` 一个已 `completed` 的 todo 会被拒绝——要继续处理请先 `reopen`）。
+
 ---
 
 ## 🧠 设计要点
@@ -136,8 +167,11 @@ Added todo #1: 实现 store
 | 特性              | 实现                                                                          |
 | ----------------- | ----------------------------------------------------------------------------- |
 | **每条 todo 双轨** | `summary`（短，用户可见）+ `goal`（长，模型私有），避免冗长污染 widget        |
+| **生命周期状态**    | `pending` / `in_progress` / `completed`，由状态机约束；widget 以颜色 + 删除线呈现 |
 | **widget 节流**    | 最多渲染 4 条，超过则 `+N more...`，避免长列表喧宾夺主                         |
+| **按状态排序**      | 渲染时按状态排序（`in_progress` → `pending` → `completed`）；插入顺序作为次要顺序保留 |
 | **分支感知**       | 状态序列化进 `toolResult.details`；`session_tree` 重放当前分支                |
+| **老数据兼容**      | 旧快照中缺少 `status` 字段时，重放时补齐为 `pending`，无需迁移              |
 | **零副作用读**     | `render()` 每次拉取最新 state，无需缓存失效处理                                |
 | **类型严格**       | TypeBox schema + strict TS，提交前 `pnpm check` 全绿                          |
 

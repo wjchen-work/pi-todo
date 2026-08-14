@@ -37,17 +37,27 @@ and what's left.
 
 ## 👀 What it looks like
 
-> The widget above the editor renders up to 4 items, then falls back to a `+N more...` hint:
+> The widget above the editor renders up to 4 items, then falls back to a `+N more...` hint. Each item is styled by its lifecycle status:
 
 ```
-  #1 Design the schema with TypeBox types
-  #2 Implement the store with branch replay
-  #3 Wire up the todo tool handlers
-  #4 Register the widget on session_start
+  #1 Implement the store with branch replay    ← in_progress (brightest, plain text)
+  #2 Wire up the todo tool handlers           ← pending (muted)
+  #3 Register the widget on session_start      ← pending (muted)
+  ~~#4 Design the schema with TypeBox types~~  ← completed (dimmed + strikethrough, sorted to the bottom)
   +2 more...
 ```
 
 Empty state: the widget is hidden — nothing renders above the editor until you add a todo.
+
+### Status lifecycle
+
+| Status        | Widget style                       | Meaning                                  |
+| ------------- | ---------------------------------- | ---------------------------------------- |
+| `pending`     | muted text                         | Planned but not started yet              |
+| `in_progress` | brightest (default `text` color)   | Currently being worked on                |
+| `completed`   | dimmed + strikethrough, sorted last | Done; visually de-emphasized             |
+
+New items start as `pending`. Use `start` to flip one to `in_progress`, `complete` to mark it done, and `reopen` to bring a completed item back to `pending`.
 
 ---
 
@@ -97,27 +107,36 @@ multi-step work is on the table. Just talk to pi normally.
 
 ---
 
-## 🛠 `todo` tool API
+## � `todo` tool API
 
 What the model sees (the TypeBox schema is rendered to the LLM automatically):
 
-| Field      | Type                              | Required for | Notes                                                |
-| ---------- | --------------------------------- | ------------ | ---------------------------------------------------- |
-| `action`   | `"add"` \| `"delete"` \| `"list"` | always       | The operation                                        |
-| `summary`  | `string`                          | `add`        | Short label — **shown in the widget**                |
-| `goal`     | `string`                          | `add`        | Detailed goal — **private to the model**, for planning |
-| `id`       | `number`                          | `delete`     | ID of the todo to remove                             |
+| Field      | Type                                                            | Required for                                  | Notes                                                |
+| ---------- | --------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------- |
+| `action`   | `"add"` \| `"delete"` \| `"list"` \| `"start"` \| `"complete"` \| `"reopen"` | always                                        | The operation                                        |
+| `summary`  | `string`                                                        | `add`                                         | Short label — **shown in the widget**                |
+| `goal`     | `string`                                                        | `add`                                         | Detailed goal — **private to the model**, for planning |
+| `id`       | `number`                                                        | `delete`, `start`, `complete`, `reopen`        | ID of the todo to operate on                         |
 
 ### Examples
 
 ```jsonc
-// 1) Add an item
+// 1) Add an item (starts as `pending`)
 { "action": "add", "summary": "Implement store", "goal": "Support add/delete/reset and branch replay" }
 
-// 2) List everything
+// 2) Start working on it (pending -> in_progress)
+{ "action": "start", "id": 1 }
+
+// 3) Mark it done (in_progress -> completed; moves to the bottom of the widget)
+{ "action": "complete", "id": 1 }
+
+// 4) List everything (including the private `goal` text and current status)
 { "action": "list" }
 
-// 3) Delete a finished item
+// 5) Reopen a completed item (completed -> pending) if you need to revisit it
+{ "action": "reopen", "id": 1 }
+
+// 6) Delete a finished item entirely
 { "action": "delete", "id": 1 }
 ```
 
@@ -130,6 +149,19 @@ Added todo #1: Implement store
 The full state snapshot is also written into the tool result's `details` — that's the secret
 sauce that makes branch-aware persistence work.
 
+### Status transitions
+
+The store enforces a small state machine so the model can't get into weird states:
+
+| From          | Allowed next                                            | Action to use |
+| ------------- | ------------------------------------------------------- | ------------- |
+| `pending`     | `pending` (no-op), `in_progress`, `completed`            | `start`, `complete` |
+| `in_progress` | `in_progress` (no-op), `completed`                       | `complete`    |
+| `completed`   | `completed` (no-op), `pending`                           | `reopen`      |
+
+Invalid transitions throw a clear error back to the LLM (e.g. `start` on an already-`completed`
+todo is rejected — `reopen` first if you really mean to resume it).
+
 ---
 
 ## 🧠 Design notes
@@ -137,8 +169,11 @@ sauce that makes branch-aware persistence work.
 | Feature                  | Implementation                                                                             |
 | ------------------------ | ------------------------------------------------------------------------------------------ |
 | **Dual-track todos**     | `summary` (short, user-visible) + `goal` (long, model-private) — keeps the widget tidy     |
+| **Lifecycle status**     | `pending` / `in_progress` / `completed` with strict transitions; widget reflects it via color + strikethrough |
 | **Widget throttling**    | Renders at most 4 items; the rest collapse into `+N more...` to stay out of your way        |
+| **Sort-by-status**       | Items are sorted by status at render time (`in_progress` first, `pending` next, `completed` last); insertion order is preserved as a secondary key |
 | **Branch awareness**     | State is serialized into `toolResult.details`; `session_tree` replays the current branch   |
+| **Legacy compat**        | Old snapshots without `status` are normalized to `pending` on replay — no migration needed  |
 | **Zero-side-effect read**| `render()` always pulls the freshest state — no invalidation bookkeeping                    |
 | **Strict types**         | TypeBox schema + strict TS; `pnpm check` stays green before every commit                  |
 

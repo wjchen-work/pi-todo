@@ -22,7 +22,9 @@ export class TodoWidget implements Component {
     const th = this.theme;
 
     if (todos.length === 0) {
-      return [truncateToWidth(th.fg("dim", "No todos"), width)];
+      // Empty state: render nothing so the widget disappears entirely
+      // (no "No todos" placeholder, no blank line).
+      return [];
     }
 
     const visible = todos.slice(0, MAX_DISPLAY);

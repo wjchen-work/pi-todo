@@ -47,11 +47,7 @@ and what's left.
   +2 more...
 ```
 
-Empty state:
-
-```
-  No todos
-```
+Empty state: the widget is hidden — nothing renders above the editor until you add a todo.
 
 ---
 

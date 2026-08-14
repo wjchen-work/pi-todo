@@ -61,15 +61,11 @@ export function registerTodoTool(pi: ExtensionAPI, store: TodoStore): void {
     name: "todo",
     label: "Todo",
     description:
-      "Manage an in-memory todo list for one round of work. Each item has a short summary (shown in the editor widget) and a longer goal (private to the agent); every item also carries a lifecycle status (pending / in_progress / completed). The summary is the item's identity — start / complete / reopen reference an existing item by its exact summary string, and every summary in the list (and within a single create batch) must be unique. Actions: create (requires items[]; each item has summary + goal; the whole batch is committed atomically and each item starts as pending; rejected if any summary already exists or collides within the batch), list, start (requires summary; pending -> in_progress), complete (requires summary; marks as completed), reopen (requires summary; completed -> pending), clean (no args; empties the list — call this at the end of a round of work). Items are never individually removed; if a step is no longer relevant, reopen it back to pending and let clean drop the whole list at round end.",
-    promptSnippet: "Track tasks via an in-memory todo list (summary + goal)",
+      "In-memory todo list for the current session. Use it for multi-step work that benefits from planning and progress tracking.",
+    promptSnippet: "Plan and track multi-step work in one session",
     promptGuidelines: [
-      "Use todo to track multi-step work as discrete rounds. At the start of a round (a new user request), batch-create the full todo list in ONE action=\"create\" call with items: [{summary, goal}, ...] — do not call create multiple times and do not mix in other actions before planning is complete. Every summary in the batch must be unique and must not collide with a summary already in the list.",
-      "As you progress, call action=\"start\" with the exact summary string when you begin a step, then action=\"complete\" with the same exact summary string when it is done. The widget renders the current status above the editor.",
-      "Call action=\"reopen\" with the exact summary string if a completed step needs to be revisited; it goes back to pending. Use this instead of deleting — individual items cannot be removed.",
-      "When the round's request is fully implemented, call action=\"clean\" once to empty the list. Do not call clean mid-round — only after every todo for the current request is completed.",
-      "The `list` and `complete` results append a reminder whenever every todo is completed — treat that reminder as the signal the round is done and call action=\"clean\" once.",
-      "Call action=\"list\" to see every item including the private goal text and current status.",
+      "Use the todo tool when a user request breaks into multiple discrete steps that benefit from planning and progress tracking.",
+      "When every step is delivered, close the round by calling todo with action=\"clean\" so the next request starts fresh.",
     ],
     parameters: TodoParams,
 

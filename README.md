@@ -86,7 +86,7 @@ multi-step work is on the table. Just talk to pi normally.
 > **pi (internally)**: Let me lay out the work in `todo` first.
 >
 > ```
-> todo create items=[{"summary":"Rewrite README","goal":"Keep the original structure, add install / usage / API sections, include an ASCII mockup"},{"summary":"Add unit tests","goal":"Cover store.create / reset / readState branches"},{"summary":"Run pnpm check","goal":"tsc --noEmit && eslint . must pass"}]
+> todo create items=[{"summary":"Rewrite README","goal":"Keep the original structure, add install / usage / API sections, include an ASCII mockup"},{"summary":"Add unit tests","goal":"Cover store.create / reset / readState branches"},{"summary":"Run npm run check","goal":"tsc --noEmit && eslint . must pass"}]
 > todo start id=1
 > ... (work on README) ...
 > todo complete id=1
@@ -94,7 +94,7 @@ multi-step work is on the table. Just talk to pi normally.
 > ... (work on tests) ...
 > todo complete id=2
 > todo start id=3
-> ... (run pnpm check) ...
+> ... (run npm run check) ...
 > todo complete id=3
 > todo clean
 > ```
@@ -102,7 +102,7 @@ multi-step work is on the table. Just talk to pi normally.
 > (The widget above the editor updates immediately —)
 >
 > ```
-> * **Run pnpm check**
+> * **Run npm run check**
 > * ~~Rewrite README~~
 > * ~~Add unit tests~~
 > ```
@@ -206,7 +206,7 @@ todo is rejected — `reopen` first if you really mean to resume it).
 | **Branch awareness**     | State is serialized into `toolResult.details`; `session_tree` replays the current branch   |
 | **Legacy compat**        | Old snapshots without `status` are normalized to `pending` on replay — no migration needed  |
 | **Zero-side-effect read**| `render()` always pulls the freshest state — no invalidation bookkeeping                    |
-| **Strict types**         | TypeBox schema + strict TS; `pnpm check` stays green before every commit                  |
+| **Strict types**         | TypeBox schema + strict TS; `npm run check` stays green before every commit                  |
 
 ---
 
@@ -228,16 +228,16 @@ src/
 
 ```bash
 # Install dependencies
-pnpm install
+npm install
 
 # Type-check + ESLint
-pnpm check
+npm run check
 
 # Lint only
-pnpm lint
+npm run lint
 ```
 
-`pnpm check` must pass before committing.
+`npm run check` must pass before committing.
 
 ### Module boundaries
 

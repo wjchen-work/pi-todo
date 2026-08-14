@@ -86,7 +86,7 @@ pi install git:https://github.com/wjchen-work/pi-todo.git
 > **pi（内部）**：先把这一轮的任务列出来，然后逐条推进。
 >
 > ```
-> todo create items=[{"summary":"重写 README","goal":"保持原有结构，新增安装/使用/API 三个章节，配 ASCII mockup"},{"summary":"补充单元测试","goal":"覆盖 store.create / reset / readState 三个分支"},{"summary":"运行 pnpm check","goal":"tsc --noEmit && eslint . 必须通过"}]
+> todo create items=[{"summary":"重写 README","goal":"保持原有结构，新增安装/使用/API 三个章节，配 ASCII mockup"},{"summary":"补充单元测试","goal":"覆盖 store.create / reset / readState 三个分支"},{"summary":"运行 npm run check","goal":"tsc --noEmit && eslint . 必须通过"}]
 > todo start id=1
 > ... (重写 README) ...
 > todo complete id=1
@@ -94,7 +94,7 @@ pi install git:https://github.com/wjchen-work/pi-todo.git
 > ... (补单元测试) ...
 > todo complete id=2
 > todo start id=3
-> ... (跑 pnpm check) ...
+> ... (跑 npm run check) ...
 > todo complete id=3
 > todo clean
 > ```
@@ -102,7 +102,7 @@ pi install git:https://github.com/wjchen-work/pi-todo.git
 > （编辑器上方的 widget 实时反映状态——）
 >
 > ```
-> * **运行 pnpm check**
+> * **运行 npm run check**
 > * ~~重写 README~~
 > * ~~补充单元测试~~
 > ```
@@ -198,7 +198,7 @@ store 内置一个最小状态机，防止模型误用：
 | **分支感知**       | 状态序列化进 `toolResult.details`；`session_tree` 重放当前分支                |
 | **老数据兼容**      | 旧快照中缺少 `status` 字段时，重放时补齐为 `pending`，无需迁移              |
 | **零副作用读**     | `render()` 每次拉取最新 state，无需缓存失效处理                                |
-| **类型严格**       | TypeBox schema + strict TS，提交前 `pnpm check` 全绿                          |
+| **类型严格**       | TypeBox schema + strict TS，提交前 `npm run check` 全绿                          |
 
 ---
 
@@ -220,16 +220,16 @@ src/
 
 ```bash
 # 安装依赖
-pnpm install
+npm install
 
 # 类型检查 + ESLint
-pnpm check
+npm run check
 
 # 仅 lint
-pnpm lint
+npm run lint
 ```
 
-提交前请确保 `pnpm check` 全绿。
+提交前请确保 `npm run check` 全绿。
 
 ### 模块边界
 

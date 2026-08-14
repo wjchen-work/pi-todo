@@ -1,5 +1,11 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { TodoState, TodoDetails, TodoItem, TodoStatus } from "./types.js";
+import type {
+  TodoState,
+  TodoDetails,
+  TodoItem,
+  TodoStatus,
+  CreateTodoInput,
+} from "./types.js";
 import { DEFAULT_STATUS, EMPTY_STATE } from "./types.js";
 import type { TodoInput } from "./schema.js";
 
@@ -73,8 +79,8 @@ export function assertTransition(current: TodoStatus, next: TodoStatus): void {
 export interface TodoStore {
   /** Live state. Reads always return the latest snapshot. */
   readonly state: TodoState;
-  add(summary: string, goal: string): TodoItem;
-  delete(id: number): TodoItem;
+  /** Batch-create one or more todos atomically. Returns the created items in input order. */
+  create(items: ReadonlyArray<CreateTodoInput>): TodoItem[];
   list(): readonly TodoItem[];
   /** Move a todo to `in_progress`. */
   start(id: number): TodoItem;
@@ -107,21 +113,22 @@ export function createStore(): TodoStore {
 
   return {
     get state() { return state; },
-    add(summary, goal) {
-      const item: TodoItem = {
-        id: state.nextId++,
-        status: DEFAULT_STATUS,
-        summary,
-        goal,
-      };
-      state.todos.push(item);
-      return item;
-    },
-    delete(id) {
-      const idx = state.todos.findIndex((t) => t.id === id);
-      if (idx === -1) throw new Error(`todo #${id} not found`);
-      const removed = state.todos.splice(idx, 1)[0]!;
-      return removed;
+    create(items) {
+      if (items.length === 0) {
+        throw new Error("create requires at least one item");
+      }
+      const created: TodoItem[] = [];
+      for (const input of items) {
+        const item: TodoItem = {
+          id: state.nextId++,
+          status: DEFAULT_STATUS,
+          summary: input.summary,
+          goal: input.goal,
+        };
+        state.todos.push(item);
+        created.push(item);
+      }
+      return created;
     },
     list() {
       return state.todos;

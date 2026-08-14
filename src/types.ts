@@ -15,11 +15,20 @@ export interface TodoState {
   nextId: number;
 }
 
+/**
+ * One entry inside a `create` action's `items` array. Each entry becomes a
+ * `TodoItem` (assigned a fresh id and `pending` status) once the batch is
+ * committed atomically.
+ */
+export interface CreateTodoInput {
+  summary: string;
+  goal: string;
+}
+
 /** Snapshot persisted into tool result `details` so branching/forking reconstructs the list. */
 export interface TodoDetails {
   action:
-    | "add"
-    | "delete"
+    | "create"
     | "list"
     | "start"
     | "complete"

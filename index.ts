@@ -2,7 +2,9 @@
  * pi-todo Extension
  *
  * Provides a todo list for the agent:
- * - A `todo` tool with `add` / `delete` / `list` actions
+ * - A `todo` tool with `create` / `list` / `start` / `complete` / `reopen` / `clean`
+ *   actions; items are batch-created via `create items: [{summary, goal}, ...]`
+ *   and never individually deleted (use `clean` to reset between rounds)
  * - Each item has a short `summary` (shown in the widget) and a longer `goal` (for the agent)
  * - A widget above the editor shows up to 4 summaries and a `+N more` hint
  *   for the hidden remainder

@@ -4,7 +4,7 @@
 
 **An in-memory todo list for the pi coding agent.**
 
-Give your model a real task list — with IDs, summaries, and detailed goals —
+Give your model a real task list — summaries, detailed goals, and live status —
 that shows up as a tidy widget above the editor for the current session.
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
@@ -22,7 +22,9 @@ that shows up as a tidy widget above the editor for the current session.
 
 `pi-todo` is an extension for the [pi coding agent](https://github.com/earendil-works/pi-coding-agent).
 It hands your model a **structured todo list** — not a wall of free-form text in the chat,
-but a real list with IDs, short summaries, and longer goals that lives in memory for the session.
+but a real list with short summaries and longer goals that lives in memory for the session.
+Each item's `summary` is also its identity: the model references todos by summary string, so there's
+no separate id to keep track of.
 
 Your model can:
 
@@ -58,7 +60,7 @@ Empty state: the widget is hidden — nothing renders above the editor until you
 | `in_progress` | `* **summary**` (bold)                 | Currently being worked on                |
 | `completed`   | `* ~~summary~~` (sorted last)          | Done; visually de-emphasized             |
 
-New items start as `pending`. Use `start` to flip one to `in_progress`, `complete` to mark it done, and `reopen` to bring a completed item back to `pending`. When a full round of work is done, call `clean` to empty the list and reset id numbering.
+New items start as `pending`. Use `start` to flip one to `in_progress`, `complete` to mark it done, and `reopen` to bring a completed item back to `pending`. When a full round of work is done, call `clean` to empty the list.
 
 ---
 
@@ -88,15 +90,15 @@ multi-step work is on the table. Just talk to pi normally.
 >
 > ```
 > todo create items=[{"summary":"Rewrite README","goal":"Keep the original structure, add install / usage / API sections, include an ASCII mockup"},{"summary":"Add unit tests","goal":"Cover store.create / clear and status transitions"},{"summary":"Run npm run check","goal":"tsc --noEmit && eslint . must pass"}]
-> todo start id=1
+> todo start summary="Rewrite README"
 > ... (work on README) ...
-> todo complete id=1
-> todo start id=2
+> todo complete summary="Rewrite README"
+> todo start summary="Add unit tests"
 > ... (work on tests) ...
-> todo complete id=2
-> todo start id=3
+> todo complete summary="Add unit tests"
+> todo start summary="Run npm run check"
 > ... (run npm run check) ...
-> todo complete id=3
+> todo complete summary="Run npm run check"
 > todo clean
 > ```
 >
@@ -109,103 +111,6 @@ multi-step work is on the table. Just talk to pi normally.
 > ```
 >
 > (After `clean`, the widget disappears — the round is done.)
-
----
-
-## � `todo` tool API
-
-What the model sees (the TypeBox schema is rendered to the LLM automatically):
-
-| Field      | Type                                                            | Required for                                  | Notes                                                |
-| ---------- | --------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------- |
-| `action`   | `"create"` \| `"list"` \| `"start"` \| `"complete"` \| `"reopen"` \| `"clean"` | always                                        | The operation                                        |
-| `items`    | `Array<{ summary: string; goal: string }>`                      | `create`                                      | Batch of todos — the whole array is committed atomically; each item has a short `summary` (shown in the widget) and a longer `goal` (private to the model) |
-| `id`       | `number`                                                        | `start`, `complete`, `reopen`                  | ID of the todo to operate on                         |
-
-### Examples
-
-```jsonc
-// 1) At the start of a round, batch-create the full plan in ONE call
-{
-  "action": "create",
-  "items": [
-    { "summary": "Implement store", "goal": "Support create and status transitions" },
-    { "summary": "Wire up the todo tool", "goal": "Add handlers, renderCall, renderResult" },
-    { "summary": "Register the widget", "goal": "Sync on session_start, hide when empty" }
-  ]
-}
-
-// 2) As you progress, flip status one step at a time
-{ "action": "start", "id": 1 }      // pending -> in_progress
-{ "action": "complete", "id": 1 }   // in_progress -> completed
-
-// 3) Peek at the full picture any time
-{ "action": "list" }
-
-// 4) Reopen a step if you need to revisit it (completed -> pending).
-//    There is no per-item delete — reopen it back to pending and let clean
-//    drop the whole list at round end.
-{ "action": "reopen", "id": 1 }
-
-// 5) At the end of the round, once everything is done — clean slate for the next round
-{ "action": "clean" }
-```
-
-Tool result:
-
-```
-Created 3 todos: #1, #2, #3
-```
-
-State lives in memory only for the current session — there is no persistence across reloads,
-branches, or forks. When every todo is `completed`, the `list` and `complete` results append a
-reminder to call `clean`, so the next round starts fresh.
-
-### Round-based workflow
-
-The widget above the editor is meant to track **one round of work** at a time:
-
-1. When the user makes a new request, **batch-create the full plan in a single `create` call**
-   — pass the entire `items: [...]` array up front. Don't spread plan creation across multiple
-   calls and don't start any work before the plan is committed.
-2. As you work, call `start` on the next item, do the work, then `complete` it. The widget
-   reflects current status in real time.
-3. If a step is no longer relevant, call `reopen` to send it back to `pending`; individual
-   items cannot be deleted.
-4. When the user's request is **fully** implemented, call `clean` once to empty the list and
-   reset id numbering. Do **not** call `clean` mid-round — only after every todo for the
-   current request is `completed`. The `list`/`complete` result text appends a reminder once
-   every todo is `completed`; treat it as the signal that the round is done.
-
-### Status transitions
-
-The store enforces a small state machine so the model can't get into weird states:
-
-| From          | Allowed next                                            | Action to use |
-| ------------- | ------------------------------------------------------- | ------------- |
-| `pending`     | `pending` (no-op), `in_progress`, `completed`            | `start`, `complete` |
-| `in_progress` | `in_progress` (no-op), `completed`                       | `complete`    |
-| `completed`   | `completed` (no-op), `pending`                           | `reopen`      |
-
-Invalid transitions throw a clear error back to the LLM (e.g. `start` on an already-`completed`
-todo is rejected — `reopen` first if you really mean to resume it).
-
----
-
-## 🧠 Design notes
-
-| Feature                  | Implementation                                                                             |
-| ------------------------ | ------------------------------------------------------------------------------------------ |
-| **Dual-track todos**     | `summary` (short, user-visible) + `goal` (long, model-private) — keeps the widget tidy     |
-| **Lifecycle status**     | `pending` / `in_progress` / `completed` with strict transitions                            |
-| **Markdown rendering**   | The widget delegates to pi's `Markdown` component — status is expressed via task checkboxes, bold, and strikethrough; no manual ANSI colors in widget code |
-| **Round-based workflow** | One round = batch `create` at the start, step-by-step `start`/`complete`, then `clean` once the round is fully done; no per-item delete |
-| **Widget throttling**    | Renders at most 4 items; the rest collapse into a `+N more...` hint                        |
-| **Sort-by-status**       | Items are sorted by status at render time (`in_progress` first, `pending` next, `completed` last); insertion order is preserved as a secondary key |
-| **In-memory state**      | The list lives only for the current session; no `details` snapshot is written, so reloads and forks start with a clean slate |
-| **All-done reminder**    | `list`/`complete` results append a reminder to call `clean` once every todo is `completed`  |
-| **Zero-side-effect read**| `render()` always pulls the freshest state — no invalidation bookkeeping                    |
-| **Strict types**         | TypeBox schema + strict TS; `npm run check` stays green before every commit                  |
 
 ---
 

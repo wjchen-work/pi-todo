@@ -23,6 +23,9 @@ export default tseslint.config(
         },
       }],
       "no-multiple-empty-lines": ["error", { max: 2, maxEOF: 0, maxBOF: 0 }],
+      // Method/function parameters are not checked for usage — declaring a
+      // parameter without referencing it inside the body is allowed.
+      "@typescript-eslint/no-unused-vars": ["error", { args: "none" }],
     },
   },
   {

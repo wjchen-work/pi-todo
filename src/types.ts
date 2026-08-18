@@ -29,8 +29,6 @@ export interface CreateTodoInput {
   goal: string;
 }
 
-export const EMPTY_STATE: TodoState = { todos: [] };
-
 /** Default status assigned to a freshly-added todo. */
 export const DEFAULT_STATUS: TodoStatus = "pending";
 

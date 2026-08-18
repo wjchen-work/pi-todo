@@ -4,7 +4,7 @@ import type {
   TodoStatus,
   CreateTodoInput,
 } from "./types.js";
-import { DEFAULT_STATUS, EMPTY_STATE } from "./types.js";
+import { DEFAULT_STATUS } from "./types.js";
 
 // ----------------------------------------------------------------------------
 // Pure functions — no closure over mutable state.
@@ -81,7 +81,13 @@ function transition(state: TodoState, summary: string, next: TodoStatus): TodoIt
 }
 
 export function createStore(): TodoStore {
-  const state: TodoState = { ...EMPTY_STATE };
+  // Use a fresh object literal — never spread from `EMPTY_STATE` (or any shared
+  // constant), because `create()` mutates `state.todos` in place. A shallow copy
+  // would alias `state.todos` with the shared constant, so a later `clear()`
+  // (which only replaces `state.todos`) would leave the shared constant
+  // pointing at the old array — and the *next* `createStore()` call would
+  // inherit the previous session's todos across `/new`.
+  const state: TodoState = { todos: [] };
 
   return {
     get state() { return state; },

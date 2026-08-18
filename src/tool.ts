@@ -11,8 +11,8 @@ import { isAllCompleted } from "./store.js";
 
 /** Reminder appended to results when every todo is `completed`. */
 const ALL_COMPLETED_HINT =
-  "All todos are completed. If this round of work is finished, call todo with " +
-  "action=\"clean\" to empty the list.";
+  "All todos are completed. You MUST call todo with action=\"clean\" to reset " +
+  "the list before starting the next round.";
 
 export function handleList(store: TodoStore): readonly TodoItem[] {
   return store.list();
@@ -61,11 +61,11 @@ export function registerTodoTool(pi: ExtensionAPI, store: TodoStore): void {
     name: "todo",
     label: "Todo",
     description:
-      "In-memory todo list for the current session. Use it for multi-step work that benefits from planning and progress tracking.",
+      "In-memory todo list for the current session. Use it for multi-step work that benefits from planning and progress tracking. You MUST call todo with action=\"clean\" once every todo is completed, so the list starts fresh on the next round.",
     promptSnippet: "Plan and track multi-step work in one session",
     promptGuidelines: [
       "Use the todo tool when a user request breaks into multiple discrete steps that benefit from planning and progress tracking.",
-      "When every step is delivered, close the round by calling todo with action=\"clean\" so the next request starts fresh.",
+      "You MUST call todo with action=\"clean\" once every todo is completed — leaving completed todos visible clutters the list for the next round.",
     ],
     parameters: TodoParams,
 
